@@ -42,7 +42,7 @@ print(f"\n→ Gerando {tentativas} tentativas...\n")
 
 # =========== CONFIGS FIXAS ============
 ANO = 2025
-MES = 12
+MES = 11
 dias_no_mes = calendar.monthrange(ANO, MES)[1]
 turnos = ["00H", "06H", "12H", "18H"]
 horas_por_turno = 6
@@ -54,35 +54,35 @@ experientes = [
 ]
 auxiliares = [
     "THAIS", "FELIPE", "B.SELAYARAN",
-    "RICHER", "GUILHERME", "B.HORNES"
+    "RICHER", "GUILHERME", "B.HORNES", "teste"
 ]
 
 preferencias = {
     "ALLAN": ["06H", "12H"],
     "RODRIGO": ["18H"],
-    "EDUARDO": ["00H", "06H"],
-    "MARCO": ["12H"],
-    "BRANCÃO": ["18H"],
-    "CLEITON": ["06H"],
-    "TONINHO": ["12H"],
-    "THAIS": ["00H"],
-    "FELIPE": ["06H"],
-    "B.SELAYARAN": ["12H"],
-    "RICHER": ["18H"],
-    "GUILHERME": ["12H"],
-    "B.HORNES": ["18H"]
+    # "EDUARDO": ["00H", "06H"],
+    # "MARCO": ["12H"],
+    # "BRANCÃO": ["18H"],
+    # "CLEITON": ["06H"],
+    # "TONINHO": ["12H"],
+    # "THAIS": ["00H"],
+    # "FELIPE": ["06H"],
+    # "B.SELAYARAN": ["12H"],
+    # "RICHER": ["18H"],
+    # "GUILHERME": ["12H"],
+    # "B.HORNES": ["18H"]
 }
 restricoes = {
     "THAIS": ["18H"],
     "RODRIGO": ["00H"],
-    "FELIPE": ["00H"],
-    "GUILHERME": ["00H"]
+    # "FELIPE": ["00H"],
+    # "GUILHERME": ["00H"]
 }
 plantoes_fixos = {
     "CLEITON": "06H",
     "MARCO": "12H",
-    "BRANCÃO": "18H",
-    "ALLAN": "06H"
+    # "BRANCÃO": "18H",
+    # "ALLAN": "06H"
 }
 
 # ========== FUNÇÕES AUXILIARES ==========
