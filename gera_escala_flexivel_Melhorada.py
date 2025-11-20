@@ -76,7 +76,7 @@ MES = 12
 dias_no_mes = calendar.monthrange(ANO, MES)[1]
 turnos = ["00H", "06H", "12H", "18H"]
 horas_por_turno = 6
-limite_dias_consecutivos = 4  # máximo 4 dias seguidos
+limite_dias_consecutivos = 4  # Sua regra nova: máximo 4 dias seguidos
 
 operadores = [
     "ALLAN", "RODRIGO", "EDUARDO", "MARCO", "BRANCÃO",
@@ -104,13 +104,18 @@ ferias = {
 #        RESTRIÇÕES FLEXÍVEIS E DINÂMICAS (arrays/dicts)
 # ============================================================
 
+# 1. Turnos proibidos de forma geral
 restricoes_turno = {
     "RODRIGO": ["00H"],
 }
+
+# 2. Dias da semana proibidos (0=seg, ..., 6=dom)
 restricoes_dia_semana = {
     "CLEITON": [5, 6],    # Sábado e domingo proibidos
     "TONINHO": [5, 6],    # Sábado e domingo proibidos
 }
+
+# 3. Turnos permitidos por dia da semana
 restricoes_turno_por_dia_semana = {
     "CLEITON": {
         0: ["06H", "12H"], 1: ["06H", "12H"], 2: ["06H", "12H"], 3: ["06H", "12H"], 4: ["12H", "18H"]
@@ -119,32 +124,44 @@ restricoes_turno_por_dia_semana = {
         0: ["12H", "18H"], 1: ["12H", "18H"], 2: ["12H", "18H"], 3: ["12H", "18H"], 4: ["06H"]
     }
 }
+
+# 4. Datas proibidas (ex: feriados)
 restricoes_datas = {
     # Exemplo: "CLEITON": [(2025, 12, 25)]
 }
+
+# 5. Preferências, plantoes fixos (exemplo)
 preferencias = {
     "ALLAN": ["06H"],
     "THAIS": ["00H"],
     "BRANCÃO": ["18H"]
 }
-plantoes_fixos = {}
+plantoes_fixos = {
+    # "CLEITON": "06H", # agora controlado acima
+}
 
 # ============================================================
 #                  FUNÇÕES PRINCIPAIS
 # ============================================================
 def pode_trabalhar(p, turno, dia):
+    # Férias
     if p in ferias:
         ini, fim = ferias[p]
         if dia < ini or dia > fim:
             return False
+    # Dia da semana
     dia_sem = datetime(ANO, MES, dia).weekday()
+    # Dias da semana proibidos
     if p in restricoes_dia_semana and dia_sem in restricoes_dia_semana[p]:
         return False
+    # Turnos permitidos por dia da semana
     if p in restricoes_turno_por_dia_semana and dia_sem in restricoes_turno_por_dia_semana[p]:
         if turno not in restricoes_turno_por_dia_semana[p][dia_sem]:
             return False
+    # Turnos proibidos de forma geral
     if p in restricoes_turno and turno in restricoes_turno[p]:
         return False
+    # Datas proibidas
     if p in restricoes_datas and (ANO, MES, dia) in restricoes_datas[p]:
         return False
     return True
@@ -156,7 +173,7 @@ def esta_de_ferias(p, dia):
             return True
     return False
 
-def score_operador(p, turno, horas, consec, modo, w_pref, w_plant, ultimo_turno, dias_mesmo_turno):
+def score_operador(p, turno, horas, consec, modo, w_pref, w_plant, dia, ultimo_turno):
     base = horas[p] / 10 + consec[p] * 3
     if modo == "A":
         if turno in preferencias.get(p, []):
@@ -165,30 +182,26 @@ def score_operador(p, turno, horas, consec, modo, w_pref, w_plant, ultimo_turno,
             base -= w_plant
     else:
         base += horas[p] / 5
-    # Penaliza troca de turno se não teve folga
-    if ultimo_turno[p] is not None and turno != ultimo_turno[p]:
-        base += 5 + dias_mesmo_turno[p]  # penalizador ajustável
-    if ultimo_turno[p] == turno:
-        base -= 1.5  # pequeno bônus
+    # Penalização por troca de turno em bloco de trabalho (NOVA REGRA)
+    if ultimo_turno.get(p) and ultimo_turno[p] != turno and consec[p] > 0:
+        base += 8   # Penalização forte para quebra de turno em sequência
     base += random.uniform(-0.2, 0.2) * (abs(base) + 1)
     base += random.uniform(-2, 2)
     return base
 
-def escolher_operador(lista, turno, modo, horas, consec, w_pref, w_plant, dia, ultimo_turno, dias_mesmo_turno):
+def escolher_operador(lista, turno, modo, horas, consec, w_pref, w_plant, dia, ultimo_turno):
     validos = [p for p in lista if pode_trabalhar(p, turno, dia) and consec[p] < limite_dias_consecutivos]
     if not validos:
         return random.choice(lista)
     random.shuffle(validos)
-    ordenados = sorted(validos, key=lambda p: score_operador(
-        p, turno, horas, consec, modo, w_pref, w_plant, ultimo_turno, dias_mesmo_turno))
+    ordenados = sorted(validos, key=lambda p: score_operador(p, turno, horas, consec, modo, w_pref, w_plant, dia, ultimo_turno))
     return random.choice(ordenados[:2])
 
 def gerar_escala(modo):
     horas = {p: 0 for p in operadores}
     consec = {p: 0 for p in operadores}
+    ultimo_turno = {p: None for p in operadores}
     dados = []
-    ultimo_turno_trabalhado = {p: None for p in operadores}
-    dias_mesmo_turno = {p: 0 for p in operadores}
     w_pref = random.randint(3, 7)
     w_plant = random.randint(7, 14)
     for dia in range(1, dias_no_mes + 1):
@@ -201,34 +214,23 @@ def gerar_escala(modo):
             if FLEXIBILIZAR and (len(exp_list) < 1 or len(aux_list) < 1):
                 op1, op2 = random.sample(disp, 2)
             else:
-                op1 = escolher_operador(exp_list, turno, modo, horas, consec, w_pref, w_plant, dia, ultimo_turno_trabalhado, dias_mesmo_turno)
-                op2 = escolher_operador(aux_list, turno, modo, horas, consec, w_pref, w_plant, dia, ultimo_turno_trabalhado, dias_mesmo_turno)
+                op1 = escolher_operador(exp_list, turno, modo, horas, consec, w_pref, w_plant, dia, ultimo_turno)
+                op2 = escolher_operador(aux_list, turno, modo, horas, consec, w_pref, w_plant, dia, ultimo_turno)
             linha[f"{turno}_OP1"] = op1
             linha[f"{turno}_OP2"] = op2
             horas[op1] += horas_por_turno
             horas[op2] += horas_por_turno
             consec[op1] += 1
             consec[op2] += 1
+            ultimo_turno[op1] = turno
+            ultimo_turno[op2] = turno
             disp.remove(op1)
             disp.remove(op2)
-            # Controle de troca de turno
-            if ultimo_turno_trabalhado[op1] == turno:
-                dias_mesmo_turno[op1] += 1
-            else:
-                dias_mesmo_turno[op1] = 1
-            ultimo_turno_trabalhado[op1] = turno
-
-            if ultimo_turno_trabalhado[op2] == turno:
-                dias_mesmo_turno[op2] += 1
-            else:
-                dias_mesmo_turno[op2] = 1
-            ultimo_turno_trabalhado[op2] = turno
-        # reset consecutivos e turnos após folga
+        # reset consecutivos/turno se não trabalhou
         for p in operadores:
             if p not in linha.values():
                 consec[p] = 0
-                ultimo_turno_trabalhado[p] = None
-                dias_mesmo_turno[p] = 0
+                ultimo_turno[p] = None
         dados.append(linha)
     return dados, horas
 
@@ -353,6 +355,8 @@ def exportar_pdf(df, melhor_horas, stats, dias_trab, titulo, subtitulo, output_p
             stats[op]["06H"],
             stats[op]["12H"],
             stats[op]["18H"],
+            dias_trab[op],
+            dias_no_mes -
             dias_trab[op],
             dias_no_mes - dias_trab[op],
         ]
