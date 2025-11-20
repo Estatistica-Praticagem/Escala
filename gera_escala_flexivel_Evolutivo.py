@@ -72,7 +72,7 @@ print(f"\n→ Gerando {tentativas} tentativas...\n")
 #                    CONFIGURAÇÃO BASE
 # ============================================================
 ANO = 2025
-MES = 11
+MES = 12
 dias_no_mes = calendar.monthrange(ANO, MES)[1]
 turnos = ["00H", "06H", "12H", "18H"]
 horas_por_turno = 6
