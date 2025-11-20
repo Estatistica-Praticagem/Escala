@@ -104,18 +104,13 @@ ferias = {
 #        RESTRIÇÕES FLEXÍVEIS E DINÂMICAS (arrays/dicts)
 # ============================================================
 
-# 1. Turnos proibidos de forma geral
 restricoes_turno = {
     "RODRIGO": ["00H"],
 }
-
-# 2. Dias da semana proibidos (0=seg, ..., 6=dom)
 restricoes_dia_semana = {
     "CLEITON": [5, 6],    # Sábado e domingo proibidos
     "TONINHO": [5, 6],    # Sábado e domingo proibidos
 }
-
-# 3. Turnos permitidos por dia da semana
 restricoes_turno_por_dia_semana = {
     "CLEITON": {
         0: ["06H", "12H"], 1: ["06H", "12H"], 2: ["06H", "12H"], 3: ["06H", "12H"], 4: ["12H", "18H"]
@@ -124,13 +119,9 @@ restricoes_turno_por_dia_semana = {
         0: ["12H", "18H"], 1: ["12H", "18H"], 2: ["12H", "18H"], 3: ["12H", "18H"], 4: ["06H"]
     }
 }
-
-# 4. Datas proibidas (ex: feriados)
 restricoes_datas = {
     # Exemplo: "CLEITON": [(2025, 12, 25)]
 }
-
-# 5. Preferências, plantoes fixos (exemplo)
 preferencias = {
     "ALLAN": ["06H"],
     "THAIS": ["00H"],
@@ -141,27 +132,53 @@ plantoes_fixos = {
 }
 
 # ============================================================
+#           FUNÇÃO: QUEBRAS DE TURNO ENTRE FOLGAS
+# ============================================================
+def contar_quebras_turno_entre_folgas(melhor, operadores, turnos):
+    quebras = {op: 0 for op in operadores}
+    last_turno = {op: None for op in operadores}
+    em_trabalho = {op: False for op in operadores}
+
+    for dia in melhor:
+        dia_turno = {op: None for op in operadores}
+        for t in turnos:
+            op1 = dia[f"{t}_OP1"]
+            op2 = dia[f"{t}_OP2"]
+            dia_turno[op1] = t
+            dia_turno[op2] = t
+
+        for op in operadores:
+            if dia_turno[op] is not None:
+                if not em_trabalho[op]:
+                    # Novo ciclo de trabalho após folga
+                    last_turno[op] = dia_turno[op]
+                    em_trabalho[op] = True
+                else:
+                    if dia_turno[op] != last_turno[op]:
+                        quebras[op] += 1
+                        last_turno[op] = dia_turno[op]
+            else:
+                # Folga detectada
+                em_trabalho[op] = False
+                last_turno[op] = None
+    return quebras
+
+# ============================================================
 #                  FUNÇÕES PRINCIPAIS
 # ============================================================
 def pode_trabalhar(p, turno, dia):
-    # Férias
     if p in ferias:
         ini, fim = ferias[p]
         if dia < ini or dia > fim:
             return False
-    # Dia da semana
     dia_sem = datetime(ANO, MES, dia).weekday()
-    # Dias da semana proibidos
     if p in restricoes_dia_semana and dia_sem in restricoes_dia_semana[p]:
         return False
-    # Turnos permitidos por dia da semana
     if p in restricoes_turno_por_dia_semana and dia_sem in restricoes_turno_por_dia_semana[p]:
         if turno not in restricoes_turno_por_dia_semana[p][dia_sem]:
             return False
-    # Turnos proibidos de forma geral
     if p in restricoes_turno and turno in restricoes_turno[p]:
         return False
-    # Datas proibidas
     if p in restricoes_datas and (ANO, MES, dia) in restricoes_datas[p]:
         return False
     return True
@@ -227,12 +244,14 @@ def gerar_escala(modo):
         dados.append(linha)
     return dados, horas
 
-def avaliar_escala(horas):
+def avaliar_escala(horas, melhor, operadores, turnos):
     valores = list(horas.values())
     dif = max(valores) - min(valores)
     media = statistics.mean(valores)
-    score = dif + media / 5
-    return score, media, max(valores), min(valores)
+    quebras = contar_quebras_turno_entre_folgas(melhor, operadores, turnos)
+    total_quebras = sum(quebras.values())
+    score = dif + media / 5 + total_quebras * 2  # PESO das quebras, ajuste se quiser!
+    return score, media, max(valores), min(valores), total_quebras
 
 # ============================================================
 #               MOTOR EVOLUTIVO — TENTATIVAS
@@ -240,15 +259,17 @@ def avaliar_escala(horas):
 melhor_score = float("inf")
 melhor = None
 melhor_horas = None
+melhor_quebras = None
 for i in range(1, tentativas + 1):
     modo = random.choice(["A", "B"]) if modo_global == "AMBOS" else modo_global
     dados, horas = gerar_escala(modo)
-    score, media, max_h, min_h = avaliar_escala(horas)
-    print(f"[{i}/{tentativas}] Score: {score:.1f} | Média: {media:.1f} | Máx {max_h} | Mín {min_h}")
+    score, media, max_h, min_h, total_quebras = avaliar_escala(horas, dados, operadores, turnos)
+    print(f"[{i}/{tentativas}] Score: {score:.1f} | Média: {media:.1f} | Máx {max_h} | Mín {min_h} | Quebras: {total_quebras}")
     if score < melhor_score:
         melhor_score = score
         melhor = dados
         melhor_horas = horas
+        melhor_quebras = total_quebras
         print(f" → NOVA MELHOR ENCONTRADA! Score {score:.1f}\n")
 
 # ============================================================
@@ -265,30 +286,25 @@ def exportar_excel(melhor, melhor_horas):
     cell = wb.add_format({"align": "center", "border": 1})
     cell_ferias = wb.add_format({"align": "center", "bg_color": "#FFE699", "border": 1})
     cell_folga = wb.add_format({"align": "center", "bg_color": "#FFC7CE", "border": 1})  # vermelho claro
-    # título
     ws.merge_range(0, 0, 0, 15, TITULO, wb.add_format({"bold": True, "font_size": 14, "align": "center"}))
     ws.write(1, 0, SUBTITULO, wb.add_format({"bold": True, "font_size": 12}))
     linha_excel = 3
     df = pd.DataFrame(melhor)
-    # largura bonita
     for col, name in enumerate(df.columns):
         ws.write(linha_excel, col, name, header)
         ws.set_column(col, col, 15)
         for row, val in enumerate(df[name], linha_excel + 1):
             dia_num = int(df.iloc[row - (linha_excel + 1), 0].split('/')[0])
-            # Destaca férias do operador
             if (col > 0 and esta_de_ferias(val, dia_num)):
                 ws.write(row, col, val, cell_ferias)
             else:
                 ws.write(row, col, val, cell)
-    # =========== TABELA LATERAL (ao lado da escala) ==========
     col_escala_fim = len(df.columns) + 2  # 2 colunas de espaço
     ws.write(linha_excel, col_escala_fim + 0, "NOME", header)
     for i, t in enumerate(turnos):
         ws.write(linha_excel, col_escala_fim + 1 + i, t, header)
     ws.write(linha_excel, col_escala_fim + 1 + len(turnos), "DIAS", header)
     ws.write(linha_excel, col_escala_fim + 2 + len(turnos), "FOLGA", header)
-    # Coleta stats
     stats = {p: {t: 0 for t in turnos} for p in operadores}
     dias_trab = {p: 0 for p in operadores}
     for dia in melhor:
@@ -302,25 +318,21 @@ def exportar_excel(melhor, melhor_horas):
             nomes_dia.add(op2)
         for n in nomes_dia:
             dias_trab[n] += 1
-    # Linhas da lateral
     for idx, p in enumerate(operadores, 1):
         ws.write(linha_excel + idx, col_escala_fim + 0, p, cell)
         for i, t in enumerate(turnos):
             ws.write(linha_excel + idx, col_escala_fim + 1 + i, stats[p][t], cell)
         ws.write(linha_excel + idx, col_escala_fim + 1 + len(turnos), dias_trab[p], cell)
-        # Folga colorida se maior ou igual a 10 (ajuste se quiser)
         folgas = dias_no_mes - dias_trab[p]
         if folgas >= 10:
             ws.write(linha_excel + idx, col_escala_fim + 2 + len(turnos), folgas, cell_folga)
         else:
             ws.write(linha_excel + idx, col_escala_fim + 2 + len(turnos), folgas, cell)
-    # =========== ABA DE RESUMO GERAL ==============
     wsl.write(0, 0, "OPERADOR", header)
     wsl.write(0, 1, "HORAS", header)
     for idx, op in enumerate(sorted(melhor_horas, key=lambda x: -melhor_horas[x]), 1):
         wsl.write(idx, 0, op, cell)
         wsl.write(idx, 1, melhor_horas[op], cell)
-    # =========== GRÁFICO DE CARGA HORÁRIA =========
     plt.figure(figsize=(8, 5))
     plt.bar(list(melhor_horas.keys()), list(melhor_horas.values()))
     plt.xticks(rotation=45, ha='right')
@@ -367,7 +379,6 @@ def exportar_pdf(df, melhor_horas, stats, dias_trab, titulo, subtitulo, output_p
 #           EXECUTA EXPORTAÇÃO CONFORME ESCOLHA
 # ============================================================
 df = pd.DataFrame(melhor)
-# Para stats e dias_trab
 stats = {p: {t: 0 for t in turnos} for p in operadores}
 dias_trab = {p: 0 for p in operadores}
 for dia in melhor:
