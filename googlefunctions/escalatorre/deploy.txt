@@ -1,0 +1,40 @@
+projeto:
+gcloud config set project local-bliss-359814
+
+
+Criar um gatilho:
+# se ainda não existir
+gcloud pubsub topics create escalatorre-trigger
+
+
+
+Deploy:
+gcloud functions deploy escalatorre-v1 \
+  --gen2 \
+  --region=southamerica-east1 \
+  --runtime=python311 \
+  --source=. \
+  --entry-point=main \
+  --memory=2GB \
+  --timeout=3600s \
+  --trigger-http \
+  --max-instances=1
+
+
+Logs:
+gcloud functions logs read escalatorre-v1 \
+  --gen2 \
+  --region=southamerica-east1 \
+  --limit=40
+
+
+
+
+Link:
+https://southamerica-east1-local-bliss-359814.cloudfunctions.net/escalatorre-v1
+
+
+curl -X POST \
+  "https://southamerica-east1-local-bliss-359814.cloudfunctions.net/escalatorre-v1" \
+  -H "Content-Type: application/json" \
+  -d @entrada.json
