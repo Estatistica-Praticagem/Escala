@@ -38,16 +38,32 @@ HARD_RULES = {
 
 # -------- SOFT CONSTRAINTS (ajustáveis) --------
 SOFT_WEIGHTS = {
+    # preferências e rodízio geral
     "preferencia_turno": 10,
-    "balanceamento_turnos": 50,
-    "dias_trabalhados": 3,
-    "desequilibrio_horas": 5,
-    "troca_de_turno": 50,
-    # novas regras de sequência / folga
+    "balanceamento_turnos": 450,      # ↑ força espalhar todos os turnos
+    "penaliza_ausencia_turno": 700,   # ↑ evita zeros em algum turno
+    "dias_trabalhados": 6,            # ↑ nivela quem folgou demais
+    "desequilibrio_horas": 18,        # ↑ reduz gap 156 h ↔ 108 h
+    "troca_de_turno": 90,             # ↑ desestimula troca facultativa
+
+    # sequência / folga
     "bonus_sequencia_mesmo_turno": 80,
     "penaliza_intercalado_trab_folga": 80,
     "bonus_folga_agrupada": 20,
 }
+
+# ---------------------------------
+#   PREFERÊNCIA DE SEQUÊNCIA
+# ---------------------------------
+TARGET_SEQ_MIN = 4          # mínimo desejável
+TARGET_SEQ_MAX = 5          # máximo desejável (6 só se não houver opção)
+
+SOFT_WEIGHTS.update({
+    "penaliza_seq_curta": 140,   # sequência < 4
+    "penaliza_seq_longa": 220,   # sequência > 5 (até 6)
+    "bonus_seq_alvo": 150        # sequência ideal 4–5
+})
+
 
 # ========================
 #   TURNOS E CONSTANTES
@@ -115,7 +131,7 @@ def parse_restricoes(lista):
 # ========================
 #   REGRAS DURAS
 # ========================
-def restricoes_hard(fid, turno, data, info, consec, ultimo_turno):
+def restricoes_hard(fid, turno, data, info, consec, ultimo_turno, stats):
     """Valida todas as regras duras SEM conflito."""
     # --- Férias / restrições de dia-semana / data / turno -----------------
     if any(s <= data <= e for s, e in info["ferias"].get(fid, [])):
@@ -145,6 +161,11 @@ def restricoes_hard(fid, turno, data, info, consec, ultimo_turno):
     # 3) Limite de dias consecutivos
     if cons >= HARD_RULES["limite_dias_consecutivos"]:
         return False
+    
+    # 4) Limite de dias no mesmo turno no mês
+    if stats is not None:
+        if stats.get(fid, {}).get(turno, 0) >= 8:
+            return False
 
     return True
 
@@ -178,6 +199,17 @@ def score_func(params, func, turno, horas, consec, dia, prefs,
     if ultimo_turno.get(fid) and ultimo_turno[fid] != turno:
         s += SOFT_WEIGHTS["troca_de_turno"]
 
+        # Penaliza concentração excessiva em 1 turno (>10 dias)
+    if stats[fid][turno] > 10:
+        s += 100 * (stats[fid][turno] - 10)
+    
+    # Penaliza ter menos de 3 turnos diferentes até agora (depois do dia 15)
+    if dia > 20:
+        turnos_feitos = sum(1 for t in TURNOS if stats[fid][t] > 0)
+        if turnos_feitos < 3:
+            s += 150 * (3 - turnos_feitos)
+
+
     # --- Avaliação da sequência desejada (4-5 dias) -----------------------
     seq_atual = consec[fid]          # antes de ESCOLHER hoje
     continua_mesmo = ultimo_turno.get(fid) == turno
@@ -196,23 +228,14 @@ def score_func(params, func, turno, horas, consec, dia, prefs,
             s += SOFT_WEIGHTS["penaliza_intercalado_trab_folga"]
         if seq_folga[fid] > 1:
             s -= seq_folga[fid] * SOFT_WEIGHTS["bonus_folga_agrupada"]
+    
+    # Penaliza ausência total no turno em questão (após 1/3 do mês)
+    if stats[fid][turno] == 0 and dia > 10:
+        s += SOFT_WEIGHTS["penaliza_ausencia_turno"]
 
     # Ruído para desempate
     s += random.uniform(-1, 1)
     return s
-
-# ---------------------------------
-#   PREFERÊNCIA DE SEQUÊNCIA
-# ---------------------------------
-TARGET_SEQ_MIN = 4          # queremos pelo menos 4 dias seguidos
-TARGET_SEQ_MAX = 5          # e no máximo 5 (6 só se não houver alternativa)
-
-SOFT_WEIGHTS.update({
-    "penaliza_seq_curta": 120,   # sequência < 4
-    "penaliza_seq_longa": 40,    # sequência > 5 (até 6)
-    "bonus_seq_alvo": 100        # sequência entre 4-5 dias
-})
-
 
 
 # ========================
@@ -223,7 +246,7 @@ def escolher_func(pool, turno, horas, consec, dia, prefs,
                   mes_acum_horas, seq_trab, seq_folga):
     """Prioridade: obrigatórios ▸ pós-folga (ciclo) ▸ livres."""
     cand = [f for f in pool
-            if restricoes_hard(str(f["id"]), turno, data, info, consec, ultimo_turno)]
+            if restricoes_hard(str(f["id"]), turno, data, info, consec, ultimo_turno, stats)]
     if not cand:
         return random.choice(pool)
 
@@ -258,7 +281,6 @@ def escolher_func(pool, turno, horas, consec, dia, prefs,
             ultimo_turno, stats, mes_acum_horas, seq_trab, seq_folga
         )
     )
-
 
 
 # ========================
@@ -448,7 +470,7 @@ def gerar_escala_mes(
                     d_local[fid] += 1
                     disp.remove(op)
 
-            # pós-dia: seq_trab / seq_folga
+            # pós-dia: ATUALIZAÇÕES DE SEQUÊNCIA E FOLGA (ajuste aprimorado)
             ids_trabalharam = {
                 str(e["id"]) for t in TURNOS for e in linha["turnos"][t]
             }
@@ -460,7 +482,7 @@ def gerar_escala_mes(
                 else:
                     seq_trab[fid] = 0
                     seq_folga[fid] += 1
-                    c[fid] = 0  # encerra sequência, mas mantém u_turno p/ ciclo
+                    c[fid] = 0  # encerra sequência, mas NÃO zera último turno
 
             dias_mes.append(linha)
 
