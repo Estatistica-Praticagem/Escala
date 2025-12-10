@@ -23,7 +23,11 @@ SOFT_WEIGHTS = {
     "balanceamento_turnos": 50,
     "dias_trabalhados": 3,
     "desequilibrio_horas": 5,
-    "troca_de_turno": 50
+    "troca_de_turno": 50,
+    # NOVOS PESOS:
+    "bonus_sequencia_mesmo_turno": 8,      # bonificação para sequência no mesmo turno
+    "penaliza_intercalado_trab_folga": 20, # penaliza trabalho-folga intercalado
+    "bonus_folga_agrupada": 8              # bonifica folgas agrupadas (mais de 1 dia seguido de folga)
 }
 
 # ========================
@@ -154,12 +158,8 @@ def is_turno_permitido_por_dia(rest, func_id, dia_semana, turno):
 # ========================
 def score_func(
     params, func, turno, horas, consec, modo, dia, prefs,
-    ultimo_turno, stats, mes_acum_horas
+    ultimo_turno, stats, mes_acum_horas, seq_trab=None, seq_folga=None
 ):
-    """
-    Calcula o score (quanto menor, melhor) para ajudar a balancear as escolhas.
-    Penaliza trocas de turno, excesso de horas, dias consecutivos etc.
-    """
     func_id = str(func["id"])
     base = 0
 
@@ -183,7 +183,19 @@ def score_func(
     if ultimo_turno.get(func_id) and ultimo_turno[func_id] != turno:
         base += SOFT_WEIGHTS["troca_de_turno"]
 
-    # Ruído randômico para evitar empate
+    # === NOVAS REGRAS SOFT PARA SEQUÊNCIA ===
+    if seq_trab and seq_folga:
+        # Bônus: está trabalhando vários dias seguidos no mesmo turno (não vale para troca)
+        if seq_trab.get(func_id, 0) > 1 and ultimo_turno.get(func_id) == turno:
+            base -= seq_trab[func_id] * SOFT_WEIGHTS["bonus_sequencia_mesmo_turno"]
+        # Penaliza se estiver alternando trabalho/folga dia sim, dia não
+        if seq_trab.get(func_id, 0) == 1 and seq_folga.get(func_id, 0) == 1:
+            base += SOFT_WEIGHTS["penaliza_intercalado_trab_folga"]
+        # Bônus: folga agrupada (mais de 1 folga seguida)
+        if seq_folga.get(func_id, 0) > 1:
+            base -= seq_folga[func_id] * SOFT_WEIGHTS["bonus_folga_agrupada"]
+
+    # Ruído randômico para desempate
     base += random.uniform(-1, 1)
     return base
 
@@ -192,7 +204,8 @@ def score_func(
 # ========================
 def escolher_func(
     lista, turno, modo, horas, consec, dia, prefs, ultimo_turno,
-    stats, params, data, info, mes_acum_horas
+    stats, params, data, info, mes_acum_horas,
+    seq_trab=None, seq_folga=None
 ):
     """
     Seleciona o funcionário garantindo máxima sequência de turnos.
@@ -229,10 +242,12 @@ def escolher_func(
     escolhidos = mantendo_ciclo if mantendo_ciclo else quebrando_ciclo
     ordenados = sorted(
         escolhidos,
-        key=lambda f: score_func(params, f, turno, horas, consec, modo, dia, prefs, ultimo_turno, stats, mes_acum_horas)
+        key=lambda f: score_func(
+            params, f, turno, horas, consec, modo, dia, prefs, ultimo_turno,
+            stats, mes_acum_horas, seq_trab=seq_trab, seq_folga=seq_folga
+        )
     )
     return ordenados[0]
-
 
 # ========================
 #   GERA PARECER ESCALA
@@ -329,7 +344,6 @@ def gerar_escala_mes(
     melhor_consec = None
     melhor_ultimo_turno = None
 
-    # Estado inicial
     if estado_acumulado:
         horas = dict(estado_acumulado["horas"])
         dias_trab = dict(estado_acumulado["dias_trab"])
@@ -341,6 +355,7 @@ def gerar_escala_mes(
 
     prefs = info["preferencias"]
     stats = {str(f["id"]): {t: 0 for t in TURNOS} for f in funcionarios}
+
     for i in range(1, tentativas + 1):
         dias_mes = []
         h = dict(horas)
@@ -348,6 +363,11 @@ def gerar_escala_mes(
         c = dict(consec)
         u_turno = dict(ultimo_turno)
         s = {k: dict(v) for k, v in stats.items()}
+
+        # Inicializar sequências de trabalho/folga
+        seq_trab = {str(f["id"]): 0 for f in funcionarios}
+        seq_folga = {str(f["id"]): 0 for f in funcionarios}
+
         for dia in range(1, dias_no_mes + 1):
             linha = {"data": str_data(ano, mes, dia), "turnos": {}}
             disp = list(funcionarios)
@@ -361,11 +381,13 @@ def gerar_escala_mes(
                 else:
                     op1 = escolher_func(
                         exp_list, turno, modo_global, h, c, dia, prefs, u_turno, s,
-                        params, data_atual, info, mes_acum_horas
+                        params, data_atual, info, mes_acum_horas,
+                        seq_trab=seq_trab, seq_folga=seq_folga
                     )
                     op2 = escolher_func(
                         aux_list, turno, modo_global, h, c, dia, prefs, u_turno, s,
-                        params, data_atual, info, mes_acum_horas
+                        params, data_atual, info, mes_acum_horas,
+                        seq_trab=seq_trab, seq_folga=seq_folga
                     )
                 linha["turnos"][turno] = [op1, op2]
                 h[str(op1["id"])] += HORAS_POR_TURNO
@@ -382,6 +404,17 @@ def gerar_escala_mes(
             for turn in TURNOS:
                 ids_trabalharam.add(str(linha["turnos"][turn][0]["id"]))
                 ids_trabalharam.add(str(linha["turnos"][turn][1]["id"]))
+
+            # Atualizar seq_trab / seq_folga
+            for f in funcionarios:
+                fid = str(f["id"])
+                if fid in ids_trabalharam:
+                    seq_trab[fid] += 1
+                    seq_folga[fid] = 0
+                else:
+                    seq_folga[fid] += 1
+                    seq_trab[fid] = 0
+
             for f in funcionarios:
                 if str(f["id"]) not in ids_trabalharam:
                     c[str(f["id"])] = 0
@@ -389,6 +422,7 @@ def gerar_escala_mes(
             for fid in ids_trabalharam:
                 d_trab[fid] += 1
             dias_mes.append(linha)
+
         valores = list(h.values())
         dif = max(valores) - min(valores)
         media = statistics.mean(valores)
