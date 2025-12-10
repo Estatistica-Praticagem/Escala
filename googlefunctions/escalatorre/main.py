@@ -6,9 +6,9 @@ Versão revisada em 2025-12-10
 • Regras duras PRIORITÁRIAS
     1. Respeita férias, datas e turnos proibidos
     2. Máx. 6 dias consecutivos de trabalho
-    3. Durante sequência (consec > 0) o funcionário
-       deve manter o MESMO turno
+    3. Durante sequência (consec > 0) o funcionário deve manter o MESMO turno
     4. Após folga (consec == 0) deve seguir o ciclo 00↔12 / 06↔18
+    5. Máximo 8 dias por turno/mês (parâmetro)
 • Regras suaves ponderadas por SOFT_WEIGHTS
 • Nenhum reset de ultimo_turno durante folga
 • Funções claramente separadas
@@ -21,7 +21,7 @@ import random
 import statistics
 
 # ========================
-#   CONFIGURAÇÃO DE PESOS
+#   CONFIGURAÇÃO DE PESOS E PARÂMETROS
 # ========================
 # -------- HARD CONSTRAINTS (imutáveis) --------
 HARD_RULES = {
@@ -29,24 +29,20 @@ HARD_RULES = {
     "dia_semana_proibido": True,
     "turno_proibido": True,
     "data_proibida": True,
-    # mantém ciclo apenas APÓS folga  (implementado na lógica)
     "troca_de_turno_sem_folga": True,
-    # exige mesmo turno DURANTE sequência
     "mesmo_turno_sem_folga": True,
-    "limite_dias_consecutivos": 6,
+    "limite_dias_consecutivos": 5,  # ajuste para máximo 6 (ou tunável)
+    "limite_dias_mesmo_turno": 8,   # <= máximo de dias por turno por mês (tunável)
 }
 
 # -------- SOFT CONSTRAINTS (ajustáveis) --------
 SOFT_WEIGHTS = {
-    # preferências e rodízio geral
     "preferencia_turno": 10,
-    "balanceamento_turnos": 450,      # ↑ força espalhar todos os turnos
-    "penaliza_ausencia_turno": 700,   # ↑ evita zeros em algum turno
-    "dias_trabalhados": 6,            # ↑ nivela quem folgou demais
-    "desequilibrio_horas": 18,        # ↑ reduz gap 156 h ↔ 108 h
-    "troca_de_turno": 90,             # ↑ desestimula troca facultativa
-
-    # sequência / folga
+    "balanceamento_turnos": 450,
+    "penaliza_ausencia_turno": 700,
+    "dias_trabalhados": 4,
+    "desequilibrio_horas": 18,
+    "troca_de_turno": 90,
     "bonus_sequencia_mesmo_turno": 80,
     "penaliza_intercalado_trab_folga": 80,
     "bonus_folga_agrupada": 20,
@@ -55,15 +51,14 @@ SOFT_WEIGHTS = {
 # ---------------------------------
 #   PREFERÊNCIA DE SEQUÊNCIA
 # ---------------------------------
-TARGET_SEQ_MIN = 4          # mínimo desejável
+TARGET_SEQ_MIN = 4          # mínimo desejável de sequência
 TARGET_SEQ_MAX = 5          # máximo desejável (6 só se não houver opção)
 
 SOFT_WEIGHTS.update({
-    "penaliza_seq_curta": 140,   # sequência < 4
-    "penaliza_seq_longa": 220,   # sequência > 5 (até 6)
-    "bonus_seq_alvo": 150        # sequência ideal 4–5
+    "penaliza_seq_curta": 440,
+    "penaliza_seq_longa": 440,
+    "bonus_seq_alvo": 150,
 })
-
 
 # ========================
 #   TURNOS E CONSTANTES
@@ -92,7 +87,6 @@ def parse_ferias(lista):
         out.setdefault(fid, []).append((ini, fim))
     return out
 
-
 def parse_preferencias(lista):
     out = {}
     for p in lista or []:
@@ -103,7 +97,6 @@ def parse_preferencias(lista):
         if turnos:
             out.setdefault(fid, set()).update(turnos)
     return out
-
 
 def parse_restricoes(lista):
     out = {
@@ -127,13 +120,11 @@ def parse_restricoes(lista):
             out["turno_permitido_por_dia"].setdefault(fid, {})[ds] = tset
     return out
 
-
 # ========================
 #   REGRAS DURAS
 # ========================
 def restricoes_hard(fid, turno, data, info, consec, ultimo_turno, stats):
     """Valida todas as regras duras SEM conflito."""
-    # --- Férias / restrições de dia-semana / data / turno -----------------
     if any(s <= data <= e for s, e in info["ferias"].get(fid, [])):
         return False
     rst, wd = info["restricoes"], data.weekday()
@@ -147,7 +138,6 @@ def restricoes_hard(fid, turno, data, info, consec, ultimo_turno, stats):
         if turno not in rst["turno_permitido_por_dia"][fid][wd]:
             return False
 
-    # --- Sequência / ciclo -----------------------------------------------
     ut, cons = ultimo_turno.get(fid), consec[fid]
 
     # 1) Durante sequência → mesmo turno obrigatório
@@ -164,11 +154,10 @@ def restricoes_hard(fid, turno, data, info, consec, ultimo_turno, stats):
     
     # 4) Limite de dias no mesmo turno no mês
     if stats is not None:
-        if stats.get(fid, {}).get(turno, 0) >= 8:
+        if stats.get(fid, {}).get(turno, 0) >= HARD_RULES["limite_dias_mesmo_turno"]:
             return False
 
     return True
-
 
 # ========================
 #   SCORE SOFT
@@ -199,7 +188,7 @@ def score_func(params, func, turno, horas, consec, dia, prefs,
     if ultimo_turno.get(fid) and ultimo_turno[fid] != turno:
         s += SOFT_WEIGHTS["troca_de_turno"]
 
-        # Penaliza concentração excessiva em 1 turno (>10 dias)
+    # Penaliza concentração excessiva em 1 turno (>10 dias)
     if stats[fid][turno] > 10:
         s += 100 * (stats[fid][turno] - 10)
     
@@ -209,9 +198,8 @@ def score_func(params, func, turno, horas, consec, dia, prefs,
         if turnos_feitos < 3:
             s += 150 * (3 - turnos_feitos)
 
-
     # --- Avaliação da sequência desejada (4-5 dias) -----------------------
-    seq_atual = consec[fid]          # antes de ESCOLHER hoje
+    seq_atual = consec[fid]          
     continua_mesmo = ultimo_turno.get(fid) == turno
     if continua_mesmo:
         futura = seq_atual + 1
@@ -237,7 +225,6 @@ def score_func(params, func, turno, horas, consec, dia, prefs,
     s += random.uniform(-1, 1)
     return s
 
-
 # ========================
 #   ESCOLHA DO FUNCIONÁRIO
 # ========================
@@ -248,6 +235,8 @@ def escolher_func(pool, turno, horas, consec, dia, prefs,
     cand = [f for f in pool
             if restricoes_hard(str(f["id"]), turno, data, info, consec, ultimo_turno, stats)]
     if not cand:
+        # Registra no terminal se não houve opção válida
+        print(f"\033[91m[ALERTA] Sem opção para {turno} dia {data}: forçando relaxamento\033[0m")
         return random.choice(pool)
 
     obrigatorios, pos_folga, livres = [], [], []
@@ -255,7 +244,7 @@ def escolher_func(pool, turno, horas, consec, dia, prefs,
     for f in cand:
         fid, ut, cons = str(f["id"]), ultimo_turno.get(str(f["id"])), consec[str(f["id"])]
 
-        if cons > 0:                      # sequência em andamento
+        if cons > 0:
             if ut == turno:
                 obrigatorios.append(f)
             else:
@@ -265,14 +254,18 @@ def escolher_func(pool, turno, horas, consec, dia, prefs,
                 livres.append(f)
             continue
 
-        if cons == 0 and ut is not None:  # acabou de folgar
+        if cons == 0 and ut is not None:
             if turno == CICLO_TURNOS[ut]:
                 pos_folga.append(f)
             continue
 
-        livres.append(f)                  # sem histórico
+        livres.append(f)    
 
     escolha_pool = obrigatorios or pos_folga or livres or cand
+
+    # Mostra seleção no terminal (debug)
+    print(f"\033[96m[CANDIDATOS {turno} dia {data}]\033[0m: " +
+          ", ".join(f["nome"] for f in escolha_pool))
 
     return min(
         escolha_pool,
@@ -281,7 +274,6 @@ def escolher_func(pool, turno, horas, consec, dia, prefs,
             ultimo_turno, stats, mes_acum_horas, seq_trab, seq_folga
         )
     )
-
 
 # ========================
 #   PARECER / RELATÓRIO
@@ -312,7 +304,6 @@ def gerar_parecer_escala(dias, funcionarios):
 
     for dia in dias:
         trabalhou = {str(f["id"]): False for f in funcionarios}
-        # percorre turnos
         for turno, dupla in dia["turnos"].items():
             for nome in dupla:
                 fid = next((str(f["id"]) for f in funcionarios if f["nome"] == nome), None)
@@ -339,7 +330,6 @@ def gerar_parecer_escala(dias, funcionarios):
                         pr["trocas_de_turno"] += 1
                 ult[fid] = turno
 
-        # atualiza sequências diário
         for f in funcionarios:
             fid = str(f["id"])
             if trabalhou[fid]:
@@ -357,14 +347,12 @@ def gerar_parecer_escala(dias, funcionarios):
                         )
                     )
                 seq_trab[fid] = seq_t_mesmo[fid] = 0
-                # NÃO zera ult[fid]; apenas manter registro p/ ciclo
 
     for fid, pr in p.items():
         pr["dias_folga"] = len(dias) - pr["dias_trabalhados"]
         if pr["menor_seq_dias_mesmo_turno"] is None:
             pr["menor_seq_dias_mesmo_turno"] = 1
     return list(p.values())
-
 
 # ========================
 #   GERADOR DE ESCALA (MÊS)
@@ -387,7 +375,7 @@ def gerar_escala_mes(
         for f in funcionarios:
             perfis[f["perfil"]].append(f)
 
-    # estado acumulado de anos/meses anteriores
+    # Estado acumulado de anos/meses anteriores
     horas = (
         dict(estado_acumulado["horas"])
         if estado_acumulado
@@ -401,13 +389,12 @@ def gerar_escala_mes(
 
     melhor_score, melhor_dias, melhor_outros = float("inf"), None, {}
 
-    for _ in range(tentativas):
+    for tentativa in range(tentativas):
         c = {str(f["id"]): 0 for f in funcionarios}
         u_turno = {str(f["id"]): None for f in funcionarios}
         stats = {str(f["id"]): {t: 0 for t in TURNOS} for f in funcionarios}
         h_local = dict(horas)
         d_local = dict(dias_trab)
-
         seq_trab = {str(f["id"]): 0 for f in funcionarios}
         seq_folga = {str(f["id"]): 0 for f in funcionarios}
 
@@ -423,6 +410,7 @@ def gerar_escala_mes(
                 aux_pool = [f for f in disp if f["perfil"] == "AUX"]
 
                 if FLEXIBILIZAR and (len(exp_pool) < 1 or len(aux_pool) < 1):
+                    print(f"\033[93m[WARN] Flexibilizando {turno} dia {data_atual}\033[0m")
                     op1, op2 = random.sample(disp, 2)
                 else:
                     op1 = escolher_func(
@@ -460,7 +448,7 @@ def gerar_escala_mes(
 
                 linha["turnos"][turno] = [op1, op2]
 
-                # atualiza estados
+                # Atualiza estados
                 for op in (op1, op2):
                     fid = str(op["id"])
                     h_local[fid] += HORAS_POR_TURNO
@@ -470,7 +458,7 @@ def gerar_escala_mes(
                     d_local[fid] += 1
                     disp.remove(op)
 
-            # pós-dia: ATUALIZAÇÕES DE SEQUÊNCIA E FOLGA (ajuste aprimorado)
+            # Pós-dia: ATUALIZAÇÕES DE SEQUÊNCIA E FOLGA (ajuste aprimorado)
             ids_trabalharam = {
                 str(e["id"]) for t in TURNOS for e in linha["turnos"][t]
             }
@@ -486,7 +474,7 @@ def gerar_escala_mes(
 
             dias_mes.append(linha)
 
-        # score simples: diferença de horas + média/5
+        # Score: diferença de horas + média/5
         valores = h_local.values()
         score = (max(valores) - min(valores)) + statistics.mean(valores) / 5
         if score < melhor_score:
@@ -498,7 +486,7 @@ def gerar_escala_mes(
                 "dias_trab": d_local,
             }
 
-    # gerar saída
+    # Gerar saída
     dias_out = [
         {
             "data": d["data"],
@@ -508,13 +496,13 @@ def gerar_escala_mes(
     ]
     parecer = gerar_parecer_escala(dias_out, funcionarios)
 
+    print(f"\033[92mMelhor score do mês: {melhor_score:.2f}\033[0m")
     return {
         "dias": dias_out,
         **melhor_outros,
         "score": melhor_score,
         "parecer": parecer,
     }
-
 
 # ========================
 #   GERADOR DE ESCALA (ANO)
@@ -531,6 +519,7 @@ def gerar_escala_ano(
     resultados = {}
     estado = None
     for m in range(int(mes_inicio), 13):
+        print(f"\033[94mGerando escala para {ano}-{parse_mes(m)}\033[0m")
         res = gerar_escala_mes(
             ano,
             m,
@@ -547,9 +536,8 @@ def gerar_escala_ano(
         estado = {"horas": res["horas"], "dias_trab": res["dias_trab"]}
     return {"ano": ano, "mes_inicio": parse_mes(mes_inicio), "escala": resultados}
 
-
 # ========================
-#   HANDLER WEB (opcional Cloud Function)
+#   HANDLER WEB (Cloud Function ou local)
 # ========================
 def main(request):
     try:
@@ -594,8 +582,8 @@ def main(request):
         )
         return _json(res)
     except Exception as e:
+        print("\033[91m[ERRO]\033[0m", e)
         return _json({"erro": "Falha inesperada", "detalhe": str(e)}, status=500)
-
 
 # ========================
 #   HELPERS HTTP
@@ -606,7 +594,6 @@ def _cors_headers():
         "Access-Control-Allow-Methods": "POST,OPTIONS",
         "Access-Control-Allow-Headers": "Content-Type",
     }
-
 
 def _json(obj, status=200):
     return (
