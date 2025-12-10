@@ -1,0 +1,137 @@
+tenhoq cadastar corretamente Fluxo do Sistema Web — Escala de Trabalho
+1. Cadastro & Gerenciamento de Funcionários
+
+Página: Funcionários
+
+Listar Funcionários: Exibe tabela com nome, status/perfil (Experiente/Auxiliar), matrícula/id.
+
+Adicionar Funcionário: Formulário com campos obrigatórios (nome, status/perfil).
+
+Editar Funcionário: Atualiza dados, inclusive status/perfil.
+
+Excluir Funcionário: Remove funcionário.
+
+2. Cadastro & Gerenciamento de Restrições
+
+Página: Restrições
+
+Listar Restrições por Funcionário: Exibe para cada funcionário as restrições cadastradas.
+
+Adicionar Restrição:
+
+Tipo: (Turno proibido, Turno preferido, Turno fixo, Dias da semana proibidos, Datas proibidas, Férias)
+
+Detalhes: Dependendo do tipo:
+
+Turnos proibidos/preferidos: seleção dos turnos.
+
+Turnos fixos: seleção dos turnos e dias da semana.
+
+Dias proibidos: seleção de dias (ex: sábado, domingo).
+
+Datas proibidas: seleção via calendário.
+
+Férias: período inicial e final.
+
+Editar/Excluir Restrições: Interface para modificar ou remover.
+
+3. Visualização e Edição de Preferências
+
+Página: Preferências
+
+Similar à de restrições, mas destacando turnos preferidos para cada funcionário.
+
+Editar/Excluir Preferência
+
+4. Consulta da Planilha Anterior (Histórico de Escalas)
+
+Página: Histórico
+
+Exibe últimas escalas geradas, com detalhes de horas por funcionário.
+
+Permite baixar o Excel/PDF da escala anterior.
+
+5. Tela de Geração de Escala
+
+Página: Gerar Escala
+
+Formulário com opções:
+
+Mês e ano de geração
+
+Tipo de exportação: Excel, PDF, Ambos
+
+Quantidade de tentativas (qualidade)
+
+Balanceamento (Suave/Forte/Ambos)
+
+Permitir duplas flexíveis (Sim/Não)
+
+Ao enviar:
+
+O frontend consulta todas as informações no banco: funcionários, restrições, preferências, férias, etc.
+
+Monta um JSON estruturado e envia via API (POST) para o backend PHP.
+
+O backend repassa o JSON para o script Python (pode ser via shell ou serviço web).
+
+O script gera a escala e devolve para o PHP o resultado (Excel/PDF/relatórios) para download e exibição.
+
+Exibe preview/resumo da escala gerada ao usuário.
+
+6. Estrutura Sugerida do JSON enviado ao Python
+{
+  "funcionarios": [
+    {"id": 1, "nome": "ALLAN", "perfil": "EXP"},
+    ...
+  ],
+  "restricoes_turno": {
+    "ALLAN": ["00H", "18H"],
+    ...
+  },
+  "restricoes_turno_por_dia_semana": {
+    "CLEITON": {"0": ["06H", "12H"], "4": ["12H", "18H"]},
+    ...
+  },
+  "restricoes_dia_semana": {
+    "TONINHO": [5, 6],
+    ...
+  },
+  "restricoes_datas": {
+    "CLEITON": [["2025-12-25"]]
+  },
+  "preferencias": {
+    "THAIS": ["00H"]
+  },
+  "plantoes_fixos": {
+    "CLEITON": "06H"
+  },
+  "ferias": {
+    "RODRIGO": ["2025-12-01", "2025-12-15"]
+  },
+  "escala_anterior": [
+    // Resumo da escala anterior para ajuste de horas, se desejar.
+  ]
+}
+
+7. Segurança e Usuabilidade
+
+Validação de campos obrigatórios
+
+Feedback visual e mensagens de sucesso/erro
+
+Histórico de alterações (quem cadastrou/alterou restrições)
+
+Permissões por usuário (quem pode editar restrições, gerar escala, etc.)
+
+8. Fluxo Geral do Usuário
+
+Usuário acessa o site e faz login.
+
+Cadasta/edita funcionários e suas restrições/preferências via interface amigável.
+
+Gera a escala conforme parâmetros desejados.
+
+Visualiza, exporta ou compartilha a escala em Excel/PDF.
+
+Pode consultar e comparar escalas anteriores para identificar melhorias.

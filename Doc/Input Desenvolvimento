@@ -1,0 +1,119 @@
+Resumo das Regras de Negócio da Escala
+1. Plantões Fixos e Restrições de Turno
+
+CLEITON:
+
+Só pode trabalhar de segunda a quinta nos turnos 06H ou 12H.
+
+Na sexta-feira, só pode 12H ou 18H.
+
+Não trabalha sábados, domingos e feriados.
+
+TONINHO:
+
+Só pode trabalhar de segunda a quinta nos turnos 12H ou 18H.
+
+Na sexta-feira, só pode 06H.
+
+Não trabalha sábados, domingos e feriados.
+
+2. Restrições Gerais de Turnos
+
+Exemplo: RODRIGO não pode trabalhar no turno 00H.
+
+Restrições podem ser facilmente adicionadas ou removidas via arrays/dicts para qualquer operador.
+
+3. Férias
+
+Operadores podem ter períodos de férias definidos (ex: {"RODRIGO": (1, 15)} significa que só trabalha do dia 1 ao 15 do mês).
+
+Durante as férias, o operador não será escalado.
+
+4. Restrições de Dias da Semana
+
+Operadores podem ter restrições específicas para dias da semana (0=Segunda, ..., 6=Domingo).
+
+Exemplo: CLEITON e TONINHO não trabalham sábados e domingos.
+
+5. Restrições Dinâmicas
+
+É possível configurar restrições para datas específicas (ex: feriados).
+
+Preferências de turno (por exemplo: ALLAN prefere 06H).
+
+Plantões fixos configuráveis para qualquer operador.
+
+6. Distribuição de Horas e Balanceamento
+
+O sistema busca distribuir as horas de forma justa entre todos os operadores, de acordo com o perfil (EXP/AUX).
+
+Há duas formas de balanceamento: suave (respeita preferências) e forte (tenta igualar horas).
+
+7. Consecutividade
+
+Um operador não pode trabalhar mais que 4 dias consecutivos (valor configurável).
+
+O algoritmo zera o contador de dias consecutivos ao detectar folga.
+
+8. Turno Fixo entre Folgas
+
+Operadores devem preferencialmente manter o mesmo turno entre suas folgas.
+
+O script penaliza quebras dessa regra, tentando manter a sequência sempre que possível.
+
+Essa regra não é absoluta, mas o algoritmo busca respeitar ao máximo.
+
+9. Folgas
+
+Cada operador deve folgar pelo menos 1 final de semana a cada 45 dias (pode ser melhor calibrado no futuro).
+
+O total de folgas é calculado e destacado.
+
+10. Duplas Flexíveis
+
+É possível permitir duplas de operadores do mesmo perfil (2 EXP ou 2 AUX) em situações específicas.
+
+Resumo do Fluxo do Script (Passo-a-Passo)
+1. Configuração Inicial
+
+Define parâmetros: ano, mês, operadores, turnos, perfil, restrições, preferências, férias, etc.
+
+2. Escolha das Opções
+
+Pergunta ao usuário qual o tipo de arquivo exportar (Excel, PDF ou ambos).
+
+Pergunta o modo de balanceamento.
+
+Pergunta se deseja permitir duplas flexíveis.
+
+Pergunta o número de tentativas (para algoritmo evolutivo).
+
+3. Funções Principais
+
+pode_trabalhar: Avalia todas as restrições para cada operador, turno e dia.
+
+score_operador: Calcula a prioridade para escalar cada operador (considera horas, consecutividade, preferências, plantão fixo, e penalizador de quebra de turno fixo).
+
+escolher_operador: Escolhe o operador mais adequado para o turno, respeitando as restrições.
+
+gerar_escala: Monta toda a escala do mês, dia a dia, turno a turno, respeitando todas as regras.
+
+avaliar_escala: Avalia cada escala gerada, levando em conta a diferença máxima de horas, média e quantidade de quebras de turno fixo.
+
+4. Algoritmo Evolutivo
+
+Realiza várias tentativas (ex: 50, 100, 300) para encontrar a melhor escala possível.
+
+A “melhor” é aquela que apresenta o menor desequilíbrio de horas e o menor número de quebras de turno fixo entre folgas.
+
+5. Exportação
+
+Gera arquivos Excel (.xlsx) e PDF (.pdf) com a escala final, gráfico de carga horária, e tabelas de resumo.
+
+Pontos Importantes para Conversas Futuras
+
+Todas as regras estão parametrizadas via arrays/dicts, facilitando integração futura com banco de dados.
+
+O sistema penaliza, mas permite (em último caso), quebras de regras quando não há solução viável — garantindo robustez.
+
+O fluxo é facilmente adaptável para novas regras, perfis e tipos de operadores.

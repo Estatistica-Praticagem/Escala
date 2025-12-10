@@ -1,2 +1,6 @@
 pip install XlsxWriter
 
+Alinhas o vue:
+yarn lint --fix
+
+

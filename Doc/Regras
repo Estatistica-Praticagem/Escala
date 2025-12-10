@@ -1,0 +1,92 @@
+Regras de Negócio — Escala de Trabalho (Torre de Controle)
+1. Plantões Fixos CLEITON
+
+Segunda a quinta-feira: Só pode trabalhar nos turnos de 06:00 ou 12:00.
+
+Sexta-feira: Só pode trabalhar nos turnos de 12:00 ou 18:00.
+
+Sábados, domingos e feriados: Não trabalha.
+
+2. Plantões Fixos TONINHO
+
+Segunda a quinta-feira: Só pode trabalhar nos turnos de 12:00 ou 18:00.
+
+Sexta-feira: Só pode trabalhar no turno de 06:00.
+
+Sábados, domingos e feriados: Não trabalha.
+
+3. Restrição de Dias Consecutivos
+
+Nenhum funcionário pode trabalhar mais de 4 dias consecutivos.
+
+Obs: A contagem de dias consecutivos deve considerar a virada do mês.
+
+4. Turno Fixo entre Folgas
+
+O ideal é que cada funcionário mantenha o mesmo turno entre as folgas, por 4 dias seguidos.
+
+Após a folga, o funcionário troca para outro turno, formando um rodízio.
+
+5. Regras de Rodízio entre Turnos
+
+(para alternância após 4 dias de turno fixo)
+
+Se o funcionário trabalhou 00:00-06:00 por 4 dias, após a folga, seu próximo turno deve ser 18:00-00:00.
+
+Se trabalhou 12:00-18:00, após a folga, retorna para 06:00-12:00.
+
+Se trabalhou 18:00-00:00, após a folga, volta para 00:00-06:00.
+
+Se trabalhou 06:00-12:00, após a folga, retorna para 12:00-18:00.
+
+6. Preferência de Manter Turno Durante a Semana
+
+Buscar manter o mesmo turno para o funcionário durante a semana. Trocas de turno devem ocorrer preferencialmente só após folgas.
+
+7. Restrição de Final de Semana
+
+Cada funcionário deve folgar pelo menos 1 final de semana a cada 45 dias.
+
+8. Restrição por Turnos Proibidos e Preferências
+
+É possível cadastrar para cada funcionário turnos proibidos (exemplo: Rodrigo não pode trabalhar 00:00-06:00).
+
+É possível cadastrar preferências de turno para tentar respeitar ao máximo as escolhas.
+
+9. Restrições por Dias da Semana
+
+Permitir definir que certos funcionários não podem trabalhar em determinados dias (ex: Cleiton e Toninho não trabalham finais de semana).
+
+10. Restrições Especiais por Feriados
+
+Funcionários podem ser marcados como proibidos em datas específicas (ex: feriados).
+
+11. Férias
+
+Cada funcionário pode ter um período de férias cadastrado, não podendo ser escalado nesses dias.
+
+12. Duplas Flexíveis
+
+Opcionalmente, pode-se permitir duplas de dois operadores do mesmo perfil (dois experientes ou dois auxiliares).
+
+13. Balanceamento Evolutivo
+
+O sistema gera múltiplas tentativas de escala, escolhendo a melhor com base em:
+
+Menor diferença entre horas trabalhadas.
+
+Menor quantidade de quebras de turno fixo.
+
+Menor número de dias consecutivos ultrapassando o limite.
+
+Menor número de finais de semana trabalhados sem folga.
+
+14. Ajuste por Planilha Anterior
+
+A cada nova geração de escala, deve-se analisar a planilha anterior e buscar ajustar para que funcionários que ficaram com horas a menos recebam mais horas, e vice-versa, equilibrando ao longo do tempo.
+
+Observações Importantes
+
+Algumas regras são preferenciais e podem ser violadas em casos extremos, mas o sistema sempre penaliza violações para minimizar ocorrências.
+
+O sistema é projetado para fácil integração com bancos de dados e alterações dinâmicas de regras.
