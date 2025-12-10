@@ -14,6 +14,7 @@ HARD_RULES = {
     "turno_proibido": True,
     "data_proibida": True,
     "troca_de_turno_sem_folga": True,
+    "mesmo_turno_sem_folga": True,
     "limite_dias_consecutivos": 6
 }
 
@@ -25,9 +26,9 @@ SOFT_WEIGHTS = {
     "desequilibrio_horas": 5,
     "troca_de_turno": 50,
     # NOVOS PESOS:
-    "bonus_sequencia_mesmo_turno": 8,      # bonificação para sequência no mesmo turno
-    "penaliza_intercalado_trab_folga": 20, # penaliza trabalho-folga intercalado
-    "bonus_folga_agrupada": 8              # bonifica folgas agrupadas (mais de 1 dia seguido de folga)
+    "bonus_sequencia_mesmo_turno": 80,      # bonificação para sequência no mesmo turno
+    "penaliza_intercalado_trab_folga": 80, # penaliza trabalho-folga intercalado
+    "bonus_folga_agrupada": 20             # bonifica folgas agrupadas (mais de 1 dia seguido de folga)
 }
 
 # ========================
@@ -104,36 +105,34 @@ def parse_restricoes(lista_rest):
 #   RESTRIÇÕES HARD (NÃO PODE)
 # ========================
 def restricoes_hard(func_id, turno, data, info, consec, ultimo_turno):
-    """
-    Restringe a escolha de funcionário com base nas hard rules.
-    Garante que, durante uma sequência, o funcionário só siga o ciclo de turnos.
-    """
-    # Férias
     if HARD_RULES["ferias"] and is_ferias(info["ferias"], func_id, data):
         return False
-    # Dia da semana proibido
     if HARD_RULES["dia_semana_proibido"] and is_dia_semana_proibido(info["restricoes"], func_id, data.weekday()):
         return False
-    # Turno proibido
     if HARD_RULES["turno_proibido"] and is_turno_proibido(info["restricoes"], func_id, turno):
         return False
-    # Data proibida
     if HARD_RULES["data_proibida"] and is_data_proibida(info["restricoes"], func_id, data):
         return False
-    # Turno permitido apenas por dia da semana
     if not is_turno_permitido_por_dia(info["restricoes"], func_id, data.weekday(), turno):
         return False
-    # Troca de turno só se folgar: se está em sequência, tem que seguir o ciclo!
-    if HARD_RULES["troca_de_turno_sem_folga"]:
-        ut = ultimo_turno.get(func_id)
-        if consec[func_id] > 0:
-            turno_esperado = CICLO_TURNOS.get(ut)
-            # Só pode seguir o ciclo correto
-            if ut is not None and turno != turno_esperado:
-                return False
-    # Limite de dias consecutivos
+
+    ut = ultimo_turno.get(func_id)
+    em_sequencia = consec[func_id] > 0
+
+    # === MESMO TURNO DURANTE SEQUÊNCIA ===
+    if consec[func_id] > 0:
+        if ultimo_turno.get(func_id) != turno:
+            return False
+
+    # === CICLO DE TURNOS APÓS FOLGA ===
+    if consec[func_id] == 0 and ultimo_turno.get(func_id) is not None:
+        esperado = CICLO_TURNOS[ultimo_turno[func_id]]
+        if turno != esperado:
+            return False
+
     if consec[func_id] >= HARD_RULES["limite_dias_consecutivos"]:
         return False
+
     return True
 
 def is_ferias(ferias, func_id, data):
@@ -207,47 +206,57 @@ def escolher_func(
     stats, params, data, info, mes_acum_horas,
     seq_trab=None, seq_folga=None
 ):
-    """
-    Seleciona o funcionário garantindo máxima sequência de turnos.
-    1. Prioriza manter no ciclo (mesmo turno até folga).
-    2. Só troca ciclo após folga.
-    """
-    candidatos = []
-    for f in lista:
-        fid = str(f["id"])
-        if restricoes_hard(fid, turno, data, info, consec, ultimo_turno):
-            candidatos.append(f)
-    if not candidatos:
-        return random.choice(lista)  # Se não há, sorteia alguém
+    candidatos = [
+        f for f in lista
+        if restricoes_hard(str(f["id"]), turno, data, info, consec, ultimo_turno)
+    ]
 
-    mantendo_ciclo = []
-    quebrando_ciclo = []
+    if not candidatos:
+        return random.choice(lista)
+
+    obrigatorios = []
+    pos_folga = []
+    livres = []
 
     for f in candidatos:
         fid = str(f["id"])
         ut = ultimo_turno.get(fid)
-        # Se está em sequência de dias, só pode seguir o ciclo exato!
-        if consec[fid] > 0:
-            turno_esperado = CICLO_TURNOS.get(ut)
-            if turno == turno_esperado:
-                mantendo_ciclo.append(f)
-            else:
-                # Não está no ciclo, só aceita se não houver ninguém melhor
-                quebrando_ciclo.append(f)
-        else:
-            # Após folga, pode reiniciar ciclo (pegar qualquer turno)
-            mantendo_ciclo.append(f)
 
-    # Prioriza quem mantém o ciclo (sequência máxima)
-    escolhidos = mantendo_ciclo if mantendo_ciclo else quebrando_ciclo
-    ordenados = sorted(
-        escolhidos,
+        # 1) Em sequência → DEVE manter turno
+        if consec[fid] > 0:
+            if ut == turno:
+                obrigatorios.append(f)
+            # Se está em sequência mas turno não bate → proibir
+            continue  
+
+        # 2) Acabou de folgar → deve seguir ciclo se houver turno anterior
+        if consec[fid] == 0 and ut is not None:
+            esperado = CICLO_TURNOS[ut]
+            if turno == esperado:
+                pos_folga.append(f)
+            else:
+                continue  # não pode iniciar no turno errado do ciclo
+        else:
+            # 3) Sem histórico → pode iniciar em qualquer turno
+            livres.append(f)
+
+    # DECISÃO FINAL
+    if obrigatorios:
+        elegiveis = obrigatorios
+    elif pos_folga:
+        elegiveis = pos_folga
+    else:
+        elegiveis = livres or candidatos
+
+    # Escolher melhor via score soft
+    return min(
+        elegiveis,
         key=lambda f: score_func(
             params, f, turno, horas, consec, modo, dia, prefs, ultimo_turno,
             stats, mes_acum_horas, seq_trab=seq_trab, seq_folga=seq_folga
         )
     )
-    return ordenados[0]
+
 
 # ========================
 #   GERA PARECER ESCALA
@@ -418,7 +427,7 @@ def gerar_escala_mes(
             for f in funcionarios:
                 if str(f["id"]) not in ids_trabalharam:
                     c[str(f["id"])] = 0
-                    u_turno[str(f["id"])] = None
+
             for fid in ids_trabalharam:
                 d_trab[fid] += 1
             dias_mes.append(linha)
