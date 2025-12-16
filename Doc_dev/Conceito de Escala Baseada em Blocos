@@ -1,0 +1,26 @@
+🔹 Conceito de Escala Baseada em Blocos
+
+Em vez de construir a escala de forma puramente diária, o modelo passa a operar sobre o conceito de blocos de trabalho.
+
+Um bloco de trabalho representa um período contínuo de dias trabalhados por um funcionário em um mesmo turno, normalmente variando entre 3 e 6 dias consecutivos, respeitando os limites operacionais existentes.
+
+O início de um bloco ocorre quando o funcionário entra em um turno específico.
+Durante todo o bloco, o funcionário permanece nesse mesmo turno, sem trocas.
+
+A troca de turno só pode acontecer quando o bloco se encerra, ou seja, após um período de folga.
+
+Esses blocos podem ser tratados de forma flexível ao longo do mês:
+
+podem ser alocados, ajustados ou redistribuídos
+
+podem ser pensados tanto no nível de duplas quanto no nível individual
+
+O objetivo principal é montar o mês a partir de blocos estáveis, garantindo que:
+
+cada funcionário trabalhe o maior número possível de dias consecutivos no mesmo turno
+
+as trocas de turno sejam raras e previsíveis
+
+o “pipocar” seja minimizado
+
+Esse modelo reflete o funcionamento das escalas reais da empresa, priorizando conforto, previsibilidade e estabilidade operacional, em vez de micro-otimizações diárias.

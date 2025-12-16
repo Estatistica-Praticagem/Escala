@@ -1,0 +1,54 @@
+CONTEXTO REAL
+Tenho um script que gera escala mensal de funcionários, inspirado em escalas reais já usadas na empresa.
+Essas escalas funcionam bem na prática porque priorizam conforto operacional, previsibilidade e estabilidade humana.
+
+CENÁRIO FIXO
+- O mês inteiro deve ser escalado.
+- Todos os dias têm 4 turnos fixos: 00H, 06H, 12H e 18H.
+- Cada turno deve ter exatamente 2 funcionários (dupla).
+
+OBJETIVO PRINCIPAL (o mais importante)
+Distribuir os funcionários de forma confortável e estável, seguindo o mesmo conceito aplicado nas escalas reais da empresa.
+
+A escala NÃO deve ser pensada apenas dia a dia.
+Ela deve ser construída a partir de BLOCOS de trabalho estáveis ao longo do mês.
+
+REGRAS DE TURNO (conceito central)
+- Quando um funcionário começa a trabalhar em um turno, ele deve PERMANECER nesse mesmo turno durante toda a sequência de dias trabalhados.
+- O funcionário NÃO deve trocar de turno enquanto estiver em sequência de trabalho.
+- A troca de turno deve ocorrer APENAS após uma folga.
+- Após a folga, o funcionário pode retornar em outro turno, seguindo o ciclo definido (ex.: 00↔12, 06↔18).
+
+CONCEITO DE BLOCO
+- Um bloco representa dias consecutivos de trabalho no mesmo turno.
+- Blocos típicos devem ter entre 3 e 6 dias consecutivos.
+- Blocos muito curtos (1–2 dias) devem ser evitados sempre que possível.
+- Blocos mais longos só devem ocorrer quando necessário por restrições do mês.
+
+Quanto MENOS “pipocar” (trocas frequentes de turno), MELHOR a escala.
+
+REGRAS DURAS (não podem ser violadas)
+1) Todos os turnos do dia devem ser preenchidos (4 turnos × 2 pessoas).
+2) Respeitar férias (funcionário em férias não pode ser escalado).
+3) Respeitar restrições declaradas (data proibida, dia da semana proibido, turno proibido).
+4) Durante dias consecutivos de trabalho, o funcionário NÃO pode trocar de turno.
+5) A troca de turno só é permitida após folga.
+6) Respeitar limites máximos (dias consecutivos, limite mensal por turno, etc.).
+
+REGRAS DE QUALIDADE (objetivo, não obrigação)
+- Priorizar estabilidade de turno antes de balanceamento fino.
+- Preferir blocos contínuos no mesmo turno.
+- Evitar trabalhar apenas 1 dia isolado em um turno.
+- Evitar padrões instáveis como T-F-T ou trocas frequentes.
+- Balancear o mês como um todo, não decisões isoladas por dia.
+
+IMPORTANTE
+Este gerador NÃO deve buscar a escala “perfeita por dia”.
+Ele deve buscar uma escala BOA PARA O MÊS INTEIRO, refletindo o funcionamento real da empresa.
+
+O que importa é:
+- estabilidade
+- conforto
+- previsibilidade
+- e não micro-otimização diária.
+

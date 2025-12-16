@@ -1,0 +1,56 @@
+PROMPT — START ORIENTADO A BLOCO (SEM REESCREVER TUDO)
+
+CONTEXTO
+Tenho um script que gera escala mensal de funcionários com 4 turnos fixos por dia
+(00H, 06H, 12H, 18H), sendo sempre 2 pessoas por turno.
+
+O algoritmo já funciona bem no restante do mês, respeitando:
+- manter o mesmo turno durante dias consecutivos
+- trocar de turno apenas após folga
+- ciclo de turnos (00↔12, 06↔18)
+
+O PROBLEMA está especificamente no START (primeira semana), onde ainda ocorre “pipocar”.
+
+OBJETIVO DESTE AJUSTE
+Corrigir o comportamento do START aplicando o conceito de BLOCO,
+SEM reescrever o algoritmo inteiro e SEM mudar o funcionamento fora do start.
+
+CONCEITO-CHAVE: START ORIENTADO A BLOCO
+Durante a primeira semana, o algoritmo NÃO deve pensar apenas dia a dia.
+Ele deve pensar no INÍCIO DE BLOCOS de trabalho.
+
+REGRAS DO START (OBRIGATÓRIAS)
+1) Quando um funcionário é escalado pela primeira vez em um turno durante o start:
+   - ele assume um BLOCO de trabalho nesse turno.
+
+2) Esse bloco tem um tamanho alvo mínimo:
+   - normalmente 3 dias consecutivos (respeitando limites já existentes).
+
+3) Enquanto o bloco NÃO estiver “fechado”:
+   - o funcionário NÃO pode sair daquele turno
+   - não pode ser realocado para outro turno
+   - não pode “pipocar”
+
+4) Somente após o bloco atingir seu tamanho mínimo:
+   - o algoritmo normal reassume
+   - regras e scores existentes continuam valendo
+   - o restante do mês segue inalterado
+
+ESCOPO DO AJUSTE
+✔ Aplicar o conceito de bloco APENAS no start (primeira semana)
+✔ Manter intacto o algoritmo fora do start
+✔ Manter todas as regras duras existentes
+✔ Manter o modelo atual baseado em dias fora do start
+
+❌ NÃO é objetivo:
+- Reescrever o algoritmo inteiro para blocos
+- Alterar regras fora da primeira semana
+- Mudar balanceamento geral do mês
+- Criar um novo sistema do zero
+
+RESULTADO ESPERADO
+- Eliminar “pipocado” no início do mês
+- Estabilizar os turnos desde o primeiro dia
+- Refletir o mesmo comportamento das escalas reais da empresa
+- Preservar o bom funcionamento já existente no restante do mês
+
