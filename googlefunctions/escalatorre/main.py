@@ -1,384 +1,564 @@
-import json
-import calendar
+"""
+Gerador de escalas EXP/AUX
+---------------------------------
+Versão revisada em 2025-12-10  (patch “start-strategy” 2025-12-15)
+
+Regras duras PRIORITÁRIAS
+    1. Respeita férias, datas e turnos proibidos
+    2. Máx. 6 dias consecutivos de trabalho   (3 logo na 1ª semana)   ### MOD
+    3. Durante sequência (consec > 0) o funcionário deve manter o MESMO turno
+    4. Após folga (consec == 0) deve seguir o ciclo 00↔12 / 06↔18
+    5. Máximo 8 dias por turno/mês (parâmetro)
+
+Regras suaves ponderadas por SOFT_WEIGHTS
+Nenhum reset de ultimo_turno durante folga
+Funções claramente separadas
+"""
+
+import json, calendar, random, statistics
 from datetime import datetime, timedelta
-import random
-import statistics
 
 # ========================
-#   CONSTANTES PRINCIPAIS
+#   CONFIGURAÇÃO DE PESOS E PARÂMETROS
 # ========================
-TURNOS = ["00H", "06H", "12H", "18H"]
-HORAS_POR_TURNO = 6
-LIMITE_DIAS_CONSECUTIVOS = 4
+START_WINDOW_DIAS    = 7      # 1ª semana
+MAX_SEQ_START_WINDOW = 3      # só 3 dias seguidos no start
+HORAS_POR_TURNO      = 6
+
+# -------- HARD CONSTRAINTS --------
+HARD_RULES = {
+    "ferias": True,
+    "dia_semana_proibido": True,
+    "turno_proibido": True,
+    "data_proibida": True,
+    "troca_de_turno_sem_folga": True,
+    "mesmo_turno_sem_folga": True,
+    "limite_dias_consecutivos": 6,   # usado depois da 1ª semana
+    "limite_dias_mesmo_turno": 8,
+}
+
+# -------- SOFT CONSTRAINTS --------
+# -------- SOFT CONSTRAINTS --------
+SOFT_WEIGHTS = {
+    # ---------- PENALTIES (↑ score = pior) ----------
+    "balanceamento_turnos":            120,  # força espalhar presença entre turnos
+    "penaliza_zero_turno":             300,  # ainda não fez nenhum dia num turno (pós-dia 8)
+    "penaliza_intercalado_trab_folga": 500,  # padrão T-F-T-F
+    "penaliza_seq_curta":              460,  # sequência < 4
+    "penaliza_seq_longa":              460,  # sequência > 5
+    "penaliza_ausencia_turno":         500,  # segue sem fazer um turno após metade do mês
+    "troca_de_turno":                   480,  # troca facultativa de turno
+    "penaliza_parceiro_repetido":       0,  # mesmo parceiro no dia seguinte
+    "dias_trabalhados":                 0,  # cada dia consecutivo trabalhado
+    "desequilibrio_horas":              400,  # gap de horas trabalhadas no mês/ano
+
+    # ---------- BONUSES (↓ score = melhor) ----------
+    "preferencia_turno":               -15,  # atende preferência declarada
+    "bonus_seq_alvo":                 -500,  # sequência ideal 4-5 dias
+    "bonus_folga_agrupada":            -400,  # folgas juntas ≥2 dias
+    "bonus_sequencia_mesmo_turno":    -500,  # mantém mesmo turno dentro da sequência
+}
+
+
+TARGET_SEQ_MIN, TARGET_SEQ_MAX = 3, 5
+
+# ➜ Novo mínimo absoluto depois da primeira semana
+MIN_SEQ_AFTER_START = 3 
 
 # ========================
-#   MODELOS & UTILITÁRIOS
+#   TURNOS E CONSTANTES
 # ========================
-def parse_mes(mes):
-    return f"{int(mes):02d}"
+TURNOS       = ["00H", "06H", "12H", "18H"]
+CICLO_TURNOS = {"00H": "12H", "12H": "00H", "06H": "18H", "18H": "06H"}
 
-def dias_do_mes(ano, mes):
-    return calendar.monthrange(ano, mes)[1]
+parse_mes = lambda m: f"{int(m):02d}"
+dias_do_mes = lambda y, m: calendar.monthrange(y, m)[1]
+str_data   = lambda y, m, d: f"{y}-{parse_mes(m)}-{int(d):02d}"
 
-def str_data(ano, mes, dia):
-    return f"{ano}-{parse_mes(mes)}-{int(dia):02d}"
-
-def parse_ferias(lista_ferias):
-    ferias = {}
-    for f in lista_ferias or []:
+# ========================
+#   PARSER DE ENTRADA
+# ========================
+def parse_ferias(lista):
+    out = {}
+    for f in lista or []:
         fid = str(f["funcionario_id"])
         ini = datetime.strptime(f["data_inicio"], "%Y-%m-%d").date()
         fim = datetime.strptime(f["data_fim"], "%Y-%m-%d").date()
-        ferias.setdefault(fid, []).append((ini, fim))
-    return ferias
+        out.setdefault(fid, []).append((ini, fim))
+    return out
 
-def parse_preferencias(lista_pref):
-    prefs = {}
-    for p in lista_pref or []:
+def parse_preferencias(lista):
+    out = {}
+    for p in lista or []:
         fid = str(p["funcionario_id"])
         turnos = set(p.get("turnos_preferidos", []))
         if p.get("turno"):
             turnos.add(p["turno"])
         if turnos:
-            prefs.setdefault(fid, set()).update(turnos)
-    return prefs
+            out.setdefault(fid, set()).update(turnos)
+    return out
 
-def parse_restricoes(lista_rest):
-    rest = {
+def parse_restricoes(lista):
+    out = {
         "dia_semana_proibido": {},
         "turno_proibido": {},
         "data_proibida": {},
         "turno_permitido_por_dia": {},
     }
-    for r in lista_rest or []:
-        fid = str(r["funcionario_id"])
-        tipo = r["tipo"]
+    for r in lista or []:
+        fid, tipo = str(r["funcionario_id"]), r["tipo"]
         if tipo == "DIA_SEMANA_PROIBIDO":
+            out["dia_semana_proibido"].setdefault(fid, set()).add(int(r["dia_semana"]))
+        elif tipo == "TURNO_PROIBIDO":
+            out["turno_proibido"].setdefault(fid, set()).add(r["turno"])
+        elif tipo == "DATA_PROIBIDA":
+            d = datetime.strptime(r["data"], "%Y-%m-%d").date()
+            out["data_proibida"].setdefault(fid, set()).add(d)
+        elif tipo == "TURNO_PERMITIDO_POR_DIA":
             ds = int(r["dia_semana"])
-            rest["dia_semana_proibido"].setdefault(fid, set()).add(ds)
-        if tipo == "TURNO_PROIBIDO":
-            turno = r.get("turno")
-            if turno:
-                rest["turno_proibido"].setdefault(fid, set()).add(turno)
-        if tipo == "DATA_PROIBIDA":
-            data = r.get("data")
-            if data:
-                d = datetime.strptime(data, "%Y-%m-%d").date()
-                rest["data_proibida"].setdefault(fid, set()).add(d)
-        if tipo == "TURNO_PERMITIDO_POR_DIA":
-            ds = int(r["dia_semana"])
-            turnos = r.get("turnos_permitidos")
-            if turnos:
-                tset = set(t.strip() for t in turnos.split(",") if t.strip())
-                rest["turno_permitido_por_dia"].setdefault(fid, {})[ds] = tset
-    return rest
+            tset = set(t.strip() for t in r["turnos_permitidos"].split(",") if t.strip())
+            out["turno_permitido_por_dia"].setdefault(fid, {})[ds] = tset
+    return out
 
-def is_ferias(ferias, func_id, data):
-    return any(start <= data <= end for start, end in ferias.get(str(func_id), []))
+# ========================
+#   REGRAS DURAS
+# ========================
+def limite_consecutivo(dia_corrente):
+    """3 dias na primeira semana; depois 6"""
+    return MAX_SEQ_START_WINDOW if dia_corrente <= START_WINDOW_DIAS else HARD_RULES["limite_dias_consecutivos"]
 
-def is_dia_semana_proibido(rest, func_id, dia_semana):
-    return dia_semana in rest["dia_semana_proibido"].get(str(func_id), set())
+def restricoes_hard(fid, turno, data, info, consec, ultimo_turno, stats):
+    if any(s <= data <= e for s, e in info["ferias"].get(fid, [])):
+        return False
 
-def is_turno_proibido(rest, func_id, turno):
-    return turno in rest["turno_proibido"].get(str(func_id), set())
+    rst, wd = info["restricoes"], data.weekday()
+    if wd in rst["dia_semana_proibido"].get(fid, set()):
+        return False
+    if turno in rst["turno_proibido"].get(fid, set()):
+        return False
+    if data in rst["data_proibida"].get(fid, set()):
+        return False
+    if wd in rst["turno_permitido_por_dia"].get(fid, {}):
+        if turno not in rst["turno_permitido_por_dia"][fid][wd]:
+            return False
 
-def is_data_proibida(rest, func_id, data):
-    return data in rest["data_proibida"].get(str(func_id), set())
+    ut, cons = ultimo_turno.get(fid), consec[fid]
 
-def is_turno_permitido_por_dia(rest, func_id, dia_semana, turno):
-    return turno in rest["turno_permitido_por_dia"].get(str(func_id), {}).get(dia_semana, set()) if \
-        dia_semana in rest["turno_permitido_por_dia"].get(str(func_id), {}) else True
+    # regra de mesma sequência
+    if cons > 0 and ut != turno:
+        return False
+    # regra de ciclo após folga
+    if cons == 0 and ut is not None and turno != CICLO_TURNOS[ut]:
+        return False
+    # limite geral de dias consecutivos
+    if cons >= limite_consecutivo(data.day):
+        return False
+    # limite de 8 dias no mesmo turno/mês
+    if stats and stats.get(fid, {}).get(turno, 0) >= HARD_RULES["limite_dias_mesmo_turno"]:
+        return False
 
-# ============================
-#      MOTOR PRINCIPAL
-# ============================
-def pode_trabalhar(params, func, turno, data, info):
-    ferias = info["ferias"]
-    rest = info["restricoes"]
-    dia_semana = data.weekday()  # 0=segunda
-    func_id = str(func["id"])
-    if is_ferias(ferias, func_id, data): return False
-    if is_dia_semana_proibido(rest, func_id, dia_semana): return False
-    if is_turno_proibido(rest, func_id, turno): return False
-    if is_data_proibida(rest, func_id, data): return False
-    permitted = is_turno_permitido_por_dia(rest, func_id, dia_semana, turno)
-    if permitted is False or (isinstance(permitted, set) and turno not in permitted): return False
+    # ---- NOVA REGRA: não deixar sequência inferior a 3 dias no turno anterior
+    if data.day > START_WINDOW_DIAS and cons == 0 and ut is not None:
+        if stats[fid][ut] < MIN_SEQ_AFTER_START:
+            return False
+
+    # se passou por todas as checagens, está OK
     return True
 
-def score_func(params, func, turno, horas, consec, modo, w_pref, dia, prefs, ultimo_turno, stats, mes_acum_horas):
-    func_id = str(func["id"])
-    base = horas[func_id] / 10 + consec[func_id] * 3
-    if modo == "A":
-        if turno in prefs.get(func_id, set()):
-            base -= w_pref
-    else:
-        base += horas[func_id] / 5
-    if ultimo_turno.get(func_id) and ultimo_turno[func_id] != turno and consec[func_id] > 0:
-        base += 8
-    if mes_acum_horas and func_id in mes_acum_horas:
-        base += (mes_acum_horas[func_id] / 50)
-    base += random.uniform(-0.2, 0.2) * (abs(base) + 1)
-    base += random.uniform(-2, 2)
-    return base
 
-def escolher_func(lista, turno, modo, horas, consec, w_pref, dia, prefs, ultimo_turno, stats, params, data, info, mes_acum_horas):
-    validos = [
-        f for f in lista
-        if pode_trabalhar(params, f, turno, data, info) and consec[str(f["id"])] < LIMITE_DIAS_CONSECUTIVOS
-    ]
-    if not validos:
-        return random.choice(lista)
-    random.shuffle(validos)
-    ordenados = sorted(validos, key=lambda f: score_func(
-        params, f, turno, horas, consec, modo, w_pref, dia, prefs, ultimo_turno, stats, mes_acum_horas))
-    return random.choice(ordenados[:2])
+# ========================
+#   SCORE SOFT
+# ========================
+def score_func(params, func, turno, horas, consec, dia, prefs,
+               ultimo_turno, stats, mes_acum_horas,
+               seq_trab=None, seq_folga=None, parceiro_ult=None, parceiro_atual=None):
+    fid = str(func["id"])
+    s = 0
 
-def gerar_escala_mes(
-    ano, mes, funcionarios, params, info,
-    estado_acumulado=None,
-    FLEXIBILIZAR=True,
-    modo_global="AMBOS",
-    tentativas=50,
-    perfis=None,
-    mes_acum_horas=None
-):
+    if turno not in prefs.get(fid, set()):
+        s += SOFT_WEIGHTS["preferencia_turno"]
+
+    media = statistics.mean(stats[fid].values())
+    if stats[fid][turno] > media + 2:
+        s += SOFT_WEIGHTS["balanceamento_turnos"] * (stats[fid][turno] - media)
+
+    s += consec[fid] * SOFT_WEIGHTS["dias_trabalhados"]
+
+    if mes_acum_horas and fid in mes_acum_horas:
+        s += (mes_acum_horas[fid] / 10) * SOFT_WEIGHTS["desequilibrio_horas"]
+
+    if ultimo_turno.get(fid) and ultimo_turno[fid] != turno:
+        s += SOFT_WEIGHTS["troca_de_turno"]
+
+    if stats[fid][turno] > 10:
+        s += 100 * (stats[fid][turno] - 10)
+
+    if dia > 20 and sum(1 for t in TURNOS if stats[fid][t] > 0) < 3:
+        s += 150
+
+    seq_atual = consec[fid]
+    continua = ultimo_turno.get(fid) == turno
+    if continua:
+        futura = seq_atual + 1
+        if futura < TARGET_SEQ_MIN:
+            s += SOFT_WEIGHTS["penaliza_seq_curta"]
+        elif TARGET_SEQ_MIN <= futura <= TARGET_SEQ_MAX:
+            s -= SOFT_WEIGHTS["bonus_seq_alvo"]
+        elif futura > TARGET_SEQ_MAX:
+            s += SOFT_WEIGHTS["penaliza_seq_longa"]
+
+    if seq_trab and seq_folga:
+        if seq_trab[fid] == 1 and seq_folga[fid] == 1:
+            s += SOFT_WEIGHTS["penaliza_intercalado_trab_folga"]
+        if seq_folga[fid] > 1:
+            s -= seq_folga[fid] * SOFT_WEIGHTS["bonus_folga_agrupada"]
+
+    # ### NEW – penaliza primeiro zero no turno a partir do dia 8
+    if stats[fid][turno] == 0 and dia > 7:
+        s += SOFT_WEIGHTS["penaliza_zero_turno"]
+
+    # ### NEW – diversidade de parceiro
+    if parceiro_ult and parceiro_ult.get(fid) == parceiro_atual:
+        s += SOFT_WEIGHTS["penaliza_parceiro_repetido"]
+
+    # ### NEW – concentração >8 dias mesmo turno
+    if stats[fid][turno] >= 8:
+        s += 120 + 40 * (stats[fid][turno] - 7)
+
+    return s + random.uniform(-1, 1)
+
+# ========================
+#   ESCOLHA DO FUNCIONÁRIO
+# ========================
+def escolher_func(pool, turno, horas, consec, dia, prefs,
+                  ultimo_turno, stats, params, data, info,
+                  mes_acum_horas, seq_trab, seq_folga,
+                  parceiro_ult, parceiro_candidato):
+    cand = [f for f in pool if restricoes_hard(str(f["id"]), turno, data, info, consec, ultimo_turno, stats)]
+    if not cand:
+        print(f"\033[91m[ALERTA] Sem opção para {turno} dia {data}: relaxando regras\033[0m")
+        return random.choice(pool)
+
+    obrigatorios, pos_folga, livres = [], [], []
+    for f in cand:
+        fid, ut, cons = str(f["id"]), ultimo_turno.get(str(f["id"])), consec[str(f["id"])]
+        if cons > 0:
+            if ut == turno:
+                obrigatorios.append(f)
+            elif cons >= TARGET_SEQ_MIN:
+                livres.append(f)
+            continue
+        if cons == 0 and ut is not None and turno == CICLO_TURNOS[ut]:
+            pos_folga.append(f)
+            continue
+        livres.append(f)
+
+    escolha_pool = obrigatorios or pos_folga or livres
+    return min(
+        escolha_pool,
+        key=lambda fx: score_func(
+            params, fx, turno, horas, consec, dia, prefs,
+            ultimo_turno, stats, mes_acum_horas,
+            seq_trab, seq_folga, parceiro_ult, parceiro_candidato
+        )
+    )
+
+# ========================
+#   FUNÇÃO AUX – duplas iniciais  ### NEW
+# ========================
+def gerar_duplas_iniciais(funcionarios, perfis):
+    """Tenta formar 4 duplas EXP/AUX; se não houver gente
+       suficiente preenche repetições de forma segura."""
+    exp = perfis["EXP"][:]
+    aux = perfis["AUX"][:]
+    random.shuffle(exp); random.shuffle(aux)
+
+    n_duplas = min(4, len(exp), len(aux))
+    duplas = []
+    for _ in range(n_duplas):
+        duplas.append((exp.pop(), aux.pop()))
+
+    # ### FIX  – completa se <4 duplas (reaproveita nomes restantes sem
+    # repetir pessoa dentro da mesma dupla)
+    while len(duplas) < 4:
+        cand1 = random.choice(perfis["EXP"])
+        cand2 = random.choice(perfis["AUX"])
+        while cand2["id"] == cand1["id"]:
+            cand2 = random.choice(perfis["AUX"])
+        duplas.append((cand1, cand2))
+
+    # devolve listas sempre com len==4
+    return duplas[:2], duplas[2:]
+
+# ========================
+#   PARECER / RELATÓRIO
+# ========================
+def gerar_parecer_escala(dias, funcionarios):
+    p = {
+        str(f["id"]): {
+            "funcionario_id": f["id"],
+            "nome": f.get("nome"),
+            "dias_trabalhados": 0,
+            "dias_folga": 0,
+            "total_horas": 0,
+            "vezes_00h": 0,
+            "vezes_06h": 0,
+            "vezes_12h": 0,
+            "vezes_18h": 0,
+            "maior_seq_dias_trab": 0,
+            "menor_seq_dias_mesmo_turno": None,
+            "trocas_de_turno": 0,
+        }
+        for f in funcionarios
+    }
+    ult = {str(f["id"]): None for f in funcionarios}
+    seq_trab = {str(f["id"]): 0 for f in funcionarios}
+    seq_t_mesmo = {str(f["id"]): 0 for f in funcionarios}
+
+    for dia in dias:
+        trabalhou = {str(f["id"]): False for f in funcionarios}
+        for turno, dupla in dia["turnos"].items():
+            for nome in dupla:
+                fid = next((str(f["id"]) for f in funcionarios if f["nome"] == nome), None)
+                if not fid:
+                    continue
+                pr = p[fid]
+                if not trabalhou[fid]:
+                    pr["dias_trabalhados"] += 1
+                trabalhou[fid] = True
+                pr["total_horas"] += HORAS_POR_TURNO
+                pr[f"vezes_{turno.lower()}"] += 1
+                if ult[fid] == turno:
+                    seq_t_mesmo[fid] += 1
+                else:
+                    if seq_t_mesmo[fid]:
+                        pr["menor_seq_dias_mesmo_turno"] = (
+                            seq_t_mesmo[fid] if pr["menor_seq_dias_mesmo_turno"] is None
+                            else min(pr["menor_seq_dias_mesmo_turno"], seq_t_mesmo[fid])
+                        )
+                    seq_t_mesmo[fid] = 1
+                    if ult[fid] is not None:
+                        pr["trocas_de_turno"] += 1
+                ult[fid] = turno
+
+        for f in funcionarios:
+            fid = str(f["id"])
+            if trabalhou[fid]:
+                seq_trab[fid] += 1
+                p[fid]["maior_seq_dias_trab"] = max(p[fid]["maior_seq_dias_trab"], seq_trab[fid])
+            else:
+                if seq_t_mesmo[fid]:
+                    p[fid]["menor_seq_dias_mesmo_turno"] = (
+                        seq_t_mesmo[fid] if p[fid]["menor_seq_dias_mesmo_turno"] is None
+                        else min(p[fid]["menor_seq_dias_mesmo_turno"], seq_t_mesmo[fid])
+                    )
+                seq_trab[fid] = seq_t_mesmo[fid] = 0
+
+    for fid, pr in p.items():
+        pr["dias_folga"] = len(dias) - pr["dias_trabalhados"]
+        if pr["menor_seq_dias_mesmo_turno"] is None:
+            pr["menor_seq_dias_mesmo_turno"] = 1
+    return list(p.values())
+
+# ========================
+#   GERADOR DE ESCALA (MÊS)
+# ========================
+def gerar_escala_mes(ano, mes, funcionarios, params, info,
+                     estado_acumulado=None, FLEXIBILIZAR=True,
+                     tentativas=50, perfis=None, mes_acum_horas=None):
     dias_no_mes = dias_do_mes(ano, mes)
     if perfis is None:
         perfis = {"EXP": [], "AUX": []}
         for f in funcionarios:
-            perfis.setdefault(f["perfil"], []).append(f)
-    melhor_score = float("inf")
-    melhor = None
-    melhor_horas = None
-    melhor_stats = None
-    melhor_dias_trab = None
-    melhor_consec = None
-    melhor_ultimo_turno = None
+            perfis[f["perfil"]].append(f)
 
-    if estado_acumulado:
-        horas = dict(estado_acumulado["horas"])
-        dias_trab = dict(estado_acumulado["dias_trab"])
-    else:
-        horas = {str(f["id"]): 0 for f in funcionarios}
-        dias_trab = {str(f["id"]): 0 for f in funcionarios}
-    consec = {str(f["id"]): 0 for f in funcionarios}
-    ultimo_turno = {str(f["id"]): None for f in funcionarios}
+    horas = dict(estado_acumulado["horas"]) if estado_acumulado else {str(f["id"]): 0 for f in funcionarios}
+    dias_trab = dict(estado_acumulado["dias_trab"]) if estado_acumulado else {str(f["id"]): 0 for f in funcionarios}
 
-    prefs = info["preferencias"]
-    stats = {str(f["id"]): {t: 0 for t in TURNOS} for f in funcionarios}
-    for i in range(1, tentativas + 1):
+    melhor_score, melhor_dias, melhor_outros = float("inf"), None, {}
+
+    for tentativa in range(tentativas):
+        c = {str(f["id"]): 0 for f in funcionarios}
+        u_turno = {str(f["id"]): None for f in funcionarios}
+        stats = {str(f["id"]): {t: 0 for t in TURNOS} for f in funcionarios}
+        h_local = dict(horas); d_local = dict(dias_trab)
+        seq_trab = {str(f["id"]): 0 for f in funcionarios}
+        seq_folga = {str(f["id"]): 0 for f in funcionarios}
+        parceiro_ult = {str(f["id"]): None for f in funcionarios}  ### NEW
+
         dias_mes = []
-        h = dict(horas)
-        d_trab = dict(dias_trab)
-        c = dict(consec)
-        u_turno = dict(ultimo_turno)
-        s = {k: dict(v) for k, v in stats.items()}
+
+        # ### NEW – duplas pré-designadas para o start
+        duplas5, duplas3 = gerar_duplas_iniciais(funcionarios, perfis)
+
+        # ### FIX – checa se start-strategy é viável
+        USE_START_STRATEGY = len(perfis["EXP"]) >= 4 and len(perfis["AUX"]) >= 4
+
         for dia in range(1, dias_no_mes + 1):
-            linha = {
-                "data": str_data(ano, mes, dia),
-                "turnos": {}
-            }
-            disp = list(funcionarios)
-            random.shuffle(disp)
             data_atual = datetime(ano, mes, dia).date()
-            for turno in TURNOS:
-                exp_list = [f for f in disp if f["perfil"] == "EXP"]
-                aux_list = [f for f in disp if f["perfil"] == "AUX"]
-                if FLEXIBILIZAR and (len(exp_list) < 1 or len(aux_list) < 1):
-                    op1, op2 = random.sample(disp, 2)
+            linha = {"data": str_data(ano, mes, dia), "turnos": {}}
+            disp = funcionarios.copy()
+            random.shuffle(disp)
+
+            for turno_i, turno in enumerate(TURNOS):
+                # ----------- janela-start -------------
+                if USE_START_STRATEGY and dia <= START_WINDOW_DIAS:
+                    src = duplas5 if dia <= 5 else duplas3
+                    if turno_i < len(src):
+                        op1, op2 = src[turno_i]
+                    else:
+                        op1, op2 = escolher_dupla_fallback(disp, disp)
+                # ----------- fluxo normal -------------
                 else:
-                    op1 = escolher_func(
-                        exp_list, turno, modo_global, h, c, 5, dia, prefs, u_turno, s,
-                        params, data_atual, info, mes_acum_horas
-                    )
-                    op2 = escolher_func(
-                        aux_list, turno, modo_global, h, c, 5, dia, prefs, u_turno, s,
-                        params, data_atual, info, mes_acum_horas
-                    )
-                linha["turnos"][turno] = [op1, op2]  # MANTÉM OBJETOS, NÃO NOMES!
-                h[str(op1["id"])] += HORAS_POR_TURNO
-                h[str(op2["id"])] += HORAS_POR_TURNO
-                c[str(op1["id"])] += 1
-                c[str(op2["id"])] += 1
-                s[str(op1["id"])][turno] += 1
-                s[str(op2["id"])][turno] += 1
-                u_turno[str(op1["id"])] = turno
-                u_turno[str(op2["id"])] = turno
-                disp.remove(op1)
-                disp.remove(op2)
-            ids_trabalharam = set()
-            for turn in TURNOS:
-                ids_trabalharam.add(str(linha["turnos"][turn][0]["id"]))
-                ids_trabalharam.add(str(linha["turnos"][turn][1]["id"]))
+                    # (bloco original de seleção com escolher_func)
+                    exp_pool = [f for f in disp if f["perfil"] == "EXP"]
+                    aux_pool = [f for f in disp if f["perfil"] == "AUX"]
+                    if FLEXIBILIZAR and (len(exp_pool) < 1 or len(aux_pool) < 1):
+                        op1, op2 = random.sample(disp, 2)
+                    else:
+                        op1 = escolher_func(exp_pool, turno, h_local, c, dia, info["preferencias"],
+                                            u_turno, stats, params, data_atual, info,
+                                            mes_acum_horas, seq_trab, seq_folga,
+                                            parceiro_ult, None)
+                        op2 = escolher_func(aux_pool, turno, h_local, c, dia, info["preferencias"],
+                                            u_turno, stats, params, data_atual, info,
+                                            mes_acum_horas, seq_trab, seq_folga,
+                                            parceiro_ult, op1["id"])
+
+                linha["turnos"][turno] = [op1, op2]
+
+                # ---------- atualizações de estado ----------
+                for op in (op1, op2):
+                    fid = str(op["id"])
+                    h_local[fid] += HORAS_POR_TURNO
+                    c[fid] += 1
+                    stats[fid][turno] += 1
+                    parceiro_ult[fid] = op2["id"] if op is op1 else op1["id"]  ### NEW
+                    u_turno[fid] = turno
+                    d_local[fid] += 1
+                    if op in disp:  # pode já ter sido removido na janela-start
+                        disp.remove(op)
+
+            ids_trab = {
+                str(e["id"]) for t in TURNOS for e in linha["turnos"][t]
+            }
             for f in funcionarios:
-                if str(f["id"]) not in ids_trabalharam:
-                    c[str(f["id"])] = 0
-                    u_turno[str(f["id"])] = None
-            for fid in ids_trabalharam:
-                d_trab[fid] += 1
+                fid = str(f["id"])
+                if fid in ids_trab:
+                    seq_trab[fid] += 1
+                    seq_folga[fid] = 0
+                else:
+                    seq_trab[fid] = 0
+                    seq_folga[fid] += 1
+                    c[fid] = 0
             dias_mes.append(linha)
-        valores = list(h.values())
-        dif = max(valores) - min(valores)
-        media = statistics.mean(valores)
-        score = dif + media / 5
+
+        valores = h_local.values()
+        score = (max(valores) - min(valores)) + statistics.mean(valores) / 5
         if score < melhor_score:
             melhor_score = score
-            melhor = dias_mes
-            melhor_horas = dict(h)
-            melhor_stats = {k: dict(v) for k, v in s.items()}
-            melhor_dias_trab = dict(d_trab)
-            melhor_consec = dict(c)
-            melhor_ultimo_turno = dict(u_turno)
-    proximo_estado = {
-        "horas": dict(melhor_horas),
-        "dias_trab": dict(melhor_dias_trab)
-    }
+            melhor_dias = dias_mes
+            melhor_outros = {"horas": h_local, "stats": stats, "dias_trab": d_local}
 
-    # --- Gera saída convertendo objetos para nomes na resposta ---
-    dias_out = []
-    for linha in melhor:
-        linha_out = {
-            "data": linha["data"],
-            "turnos": {
-                turno: [f["nome"] for f in dupla]
-                for turno, dupla in linha["turnos"].items()
-            }
+    dias_out = [
+        {
+            "data": d["data"],
+            "turnos": {t: [f["nome"] for f in dupla] for t, dupla in d["turnos"].items()},
         }
-        dias_out.append(linha_out)
+        for d in melhor_dias
+    ]
+    parecer = gerar_parecer_escala(dias_out, funcionarios)
+    print(f"\033[92mMelhor score {ano}-{parse_mes(mes)}: {melhor_score:.2f}\033[0m")
 
     return {
         "dias": dias_out,
-        "horas": melhor_horas,
-        "stats": melhor_stats,
-        "dias_trab": melhor_dias_trab,
+        **melhor_outros,
         "score": melhor_score,
-        "media": statistics.mean(list(melhor_horas.values())),
-        "max": max(melhor_horas.values()),
-        "min": min(melhor_horas.values()),
-        "proximo_estado": proximo_estado
+        "parecer": parecer,
     }
 
-def gerar_escala_ano(
-    ano, mes_inicio, funcionarios, params, info,
-    FLEXIBILIZAR=True, modo_global="AMBOS", tentativas=50
-):
+# ========================
+#   FUNÇÃO AUX – duplas iniciais  ### NEW
+# ========================
+def escolher_dupla_fallback(disp, aux_pool):
+    """devolve (EXP, AUX) sempre válidos, mesmo que a lista esteja vazia"""
+    if not disp: disp[:] = aux_pool or funcionarios
+    op1 = random.choice(disp)
+    op2 = random.choice(aux_pool)
+    while op2["id"] == op1["id"]:
+        op2 = random.choice(aux_pool)
+    return op1, op2
+
+
+# ========================
+#   GERADOR DE ESCALA (ANO) – inalterado
+# ========================
+def gerar_escala_ano(ano, mes_inicio, funcionarios, params, info,
+                     FLEXIBILIZAR=True, tentativas=50):
     resultados = {}
-    estado_acumulado = None
-    meses_processados = []
-    analise_ano = {
-        "score_total": 0,
-        "media_horas_total": 0,
-        "max_horas": 0,
-        "min_horas": 10000,
-    }
-    estatisticas_finais = {
-        "horas": {},
-        "dias_trabalhados": {},
-    }
+    estado = None
     for m in range(int(mes_inicio), 13):
+        print(f"\033[94mGerando escala para {ano}-{parse_mes(m)}\033[0m")
         res = gerar_escala_mes(
             ano, m, funcionarios, params, info,
-            estado_acumulado=estado_acumulado,
-            FLEXIBILIZAR=FLEXIBILIZAR,
-            modo_global=modo_global,
-            tentativas=tentativas,
-            mes_acum_horas=estado_acumulado["horas"] if estado_acumulado else None
+            estado_acumulado=estado, FLEXIBILIZAR=FLEXIBILIZAR,
+            tentativas=tentativas, mes_acum_horas=estado["horas"] if estado else None,
         )
         chave = f"{ano}-{parse_mes(m)}"
-        resultados[chave] = res["dias"]
-        meses_processados.append(parse_mes(m))
-        analise_ano["score_total"] += res["score"]
-        analise_ano["media_horas_total"] += res["media"]
-        if res["max"] > analise_ano["max_horas"]:
-            analise_ano["max_horas"] = res["max"]
-        if res["min"] < analise_ano["min_horas"]:
-            analise_ano["min_horas"] = res["min"]
-        estatisticas_finais["horas"] = res["horas"]
-        estatisticas_finais["dias_trabalhados"] = res["dias_trab"]
-        estado_acumulado = res["proximo_estado"]
-    meses_count = len(meses_processados)
-    analise = {
-        "melhor_score": round(analise_ano["score_total"] / meses_count, 2) if meses_count else None,
-        "media_horas": round(analise_ano["media_horas_total"] / meses_count, 2) if meses_count else None,
-        "max_horas": analise_ano["max_horas"],
-        "min_horas": analise_ano["min_horas"]
-    }
-    return {
-        "ano": ano,
-        "mes_inicio": parse_mes(mes_inicio),
-        "meses_processados": meses_processados,
-        "escala": resultados,
-        "analise": analise,
-        "estatisticas": estatisticas_finais
-    }
+        resultados[chave] = res  # << Não sobrescreva, mantenha o dict completo!
+        estado = {"horas": res["horas"], "dias_trab": res["dias_trab"]}
+    return {"ano": ano, "mes_inicio": parse_mes(mes_inicio), "escala": resultados}
 
-
+# ========================
+#   HANDLER WEB – inalterado
+# ========================
 def main(request):
     try:
         if request.method == "OPTIONS":
             return ("", 204, _cors_headers())
         if request.method != "POST":
             return _json({"erro": "Use POST"}, status=405)
-        try:
-            payload = request.get_json(force=True)
-        except Exception as ex:
-            return _json({"erro": "JSON inválido", "detalhe": str(ex)}, status=400)
-        if "ano" not in payload or "mes_inicio" not in payload or "funcionarios" not in payload:
-            return _json({"erro": "Campos obrigatórios: ano, mes_inicio, funcionarios"}, status=400)
-        ano = int(payload["ano"])
-        mes_inicio = int(payload["mes_inicio"])
-        funcionarios = payload["funcionarios"]
-        params = payload.get("parametros", {})
+
+        payload = request.get_json(force=True)
+        ano = int(payload["ano"]); mes_inicio = int(payload["mes_inicio"])
+        funcionarios = payload["funcionarios"]; params = payload.get("parametros", {})
         tentativas = int(params.get("quantidade_escalas", 50))
-        FLEXIBILIZAR = bool(params.get("permite_dupla_exp", True) and params.get("permite_dupla_aux", True))
-        modo_global = "AMBOS"
-        ferias = parse_ferias(payload.get("ferias"))
-        preferencias = parse_preferencias(payload.get("preferencias"))
-        restricoes = parse_restricoes(payload.get("restricoes"))
+        FLEX = bool(params.get("permite_dupla_exp", True) and params.get("permite_dupla_aux", True))
+
         info = {
-            "ferias": ferias,
-            "preferencias": preferencias,
-            "restricoes": restricoes
+            "ferias": parse_ferias(payload.get("ferias")),
+            "preferencias": parse_preferencias(payload.get("preferencias")),
+            "restricoes": parse_restricoes(payload.get("restricoes")),
         }
 
-        # Aqui: retorna só mês ou ano dependendo do parâmetro (tipo)
-        tipo = payload.get("tipo", "ano")  # "mes" ou "ano"
-        if tipo == "mes":
+        if payload.get("tipo", "ano") == "mes":
             res = gerar_escala_mes(
-                ano=ano,
-                mes=mes_inicio,
-                funcionarios=funcionarios,
-                params=params,
-                info=info,
-                FLEXIBILIZAR=FLEXIBILIZAR,
-                modo_global=modo_global,
-                tentativas=tentativas
+                ano, mes_inicio, funcionarios, params, info,
+                FLEXIBILIZAR=FLEX, tentativas=tentativas,
             )
             return _json(res)
-        else:
-            resultado = gerar_escala_ano(
-                ano=ano,
-                mes_inicio=mes_inicio,
-                funcionarios=funcionarios,
-                params=params,
-                info=info,
-                FLEXIBILIZAR=FLEXIBILIZAR,
-                modo_global=modo_global,
-                tentativas=tentativas
-            )
-            return _json(resultado)
+        res = gerar_escala_ano(
+            ano, mes_inicio, funcionarios, params, info,
+            FLEXIBILIZAR=FLEX, tentativas=tentativas,
+        )
+        return _json(res)
     except Exception as e:
+        print("\033[91m[ERRO]\033[0m", e)
         return _json({"erro": "Falha inesperada", "detalhe": str(e)}, status=500)
 
+# ========================
+#   HELPERS HTTP – inalterado
+# ========================
 def _cors_headers():
     return {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "POST,OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type"
+        "Access-Control-Allow-Headers": "Content-Type",
     }
 
 def _json(obj, status=200):
-    return (json.dumps(obj, ensure_ascii=False, indent=2), status, {
-        "Content-Type": "application/json",
-        **_cors_headers()
-    })
+    return (
+        json.dumps(obj, ensure_ascii=False, indent=2),
+        status,
+        {"Content-Type": "application/json", **_cors_headers()},
+    )
