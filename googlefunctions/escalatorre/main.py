@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 #   CONFIGURAÇÃO DE PESOS E PARÂMETROS
 # ========================
 START_WINDOW_DIAS    = 7      # 1ª semana
-MAX_SEQ_START_WINDOW = 3      # só 3 dias seguidos no start
+MAX_SEQ_START_WINDOW = 6      # só 6 dias seguidos no start
 HORAS_POR_TURNO      = 6
 
 # -------- HARD CONSTRAINTS --------
@@ -400,13 +400,22 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
             obrig_por_turno = {t: [] for t in TURNOS}
             if dia <= START_WINDOW_DIAS:
                 for fid, binfo in list(bloco.items()):
+
+                    # encerra bloco já fechado
                     if binfo["remaining"] <= 0:
                         bloco.pop(fid)
                         continue
+
+                    # 🔒 NOVA REGRA: não permite >6 dias seguidos nem no START
+                    if c[fid] >= HARD_RULES["limite_dias_consecutivos"]:
+                        bloco.pop(fid)        # força folga
+                        continue
+
                     emp = next((e for e in disp if str(e["id"]) == fid), None)
-                    if emp is None:                  # indisponível hoje -> cancela bloco
+                    if emp is None:           # indisponível hoje → cancela bloco
                         bloco.pop(fid)
                         continue
+
                     if len(obrig_por_turno[binfo["turno"]]) < 2:
                         obrig_por_turno[binfo["turno"]].append(emp)
                         disp.remove(emp)

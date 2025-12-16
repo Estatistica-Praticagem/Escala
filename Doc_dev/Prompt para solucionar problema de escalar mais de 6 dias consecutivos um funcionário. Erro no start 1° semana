@@ -1,0 +1,188 @@
+PROMPT FINAL — AJUSTE CIRÚRGICO DO START (OTIMIZADO PARA IA)
+PAPEL DA IA
+
+Você atuará como engenheiro de software sênior, com foco em:
+
+ajustes cirúrgicos
+
+preservação de comportamento existente
+
+respeito absoluto a regras duras
+
+zero refatoração desnecessária
+
+CONTEXTO TÉCNICO
+
+Existe um script grande e funcional que gera escala mensal de funcionários.
+
+Características fixas do sistema:
+
+Mês completo deve ser escalado
+
+4 turnos fixos por dia: 00H, 06H, 12H, 18H
+
+Exatamente 2 funcionários por turno
+
+Funcionários EXP e AUX
+
+Regras fora do START já funcionam corretamente e NÃO devem ser alteradas
+
+PROBLEMA IDENTIFICADO (CLARO E CONCRETO)
+
+Na primeira semana do mês (START) ocorrem dois problemas inaceitáveis:
+
+Funcionário sendo escalado em mais de um turno no mesmo dia
+
+Funcionário ultrapassando 6 dias consecutivos de trabalho sem um dia inteiro de folga, burlando o limite via troca de turno
+
+Esses problemas não existem nas escalas reais da empresa e precisam ser eliminados.
+
+OBJETIVO DO AJUSTE
+
+Corrigir exclusivamente o START, garantindo:
+
+estabilidade desde o dia 1
+
+ausência total de “pipocar”
+
+impossibilidade de burlar regras duras
+
+preservação do funcionamento atual fora do START
+
+⚠️ NÃO reescrever o algoritmo inteiro
+⚠️ NÃO alterar lógica fora da primeira semana
+⚠️ NÃO refatorar por estética
+
+REGRA DURA GLOBAL (OBRIGATÓRIA)
+🔒 UNICIDADE DIÁRIA (SEM EXCEÇÕES)
+
+Um funcionário pode trabalhar em NO MÁXIMO 1 turno por dia.
+
+Esta regra:
+
+é hard constraint
+
+deve ser aplicada antes de qualquer escolha
+
+deve valer:
+
+no START
+
+fora do START
+
+em fallback
+
+em relaxamento de regras
+
+NÃO pode ser violada sob nenhuma circunstância
+
+REGRA DURA GLOBAL (OBRIGATÓRIA)
+🔒 LIMITE DE DIAS CONSECUTIVOS
+
+Nenhum funcionário pode trabalhar mais de 6 dias consecutivos sem pelo menos 1 dia inteiro de folga.
+
+Troca de turno não é folga
+
+Trabalhar em outro turno não reseta sequência
+
+Esta regra deve ser impossível de burlar
+
+CONCEITO-CHAVE DO AJUSTE
+🧱 START ORIENTADO A BLOCO
+
+O START não deve ser resolvido apenas dia a dia.
+
+Durante a primeira semana, o algoritmo deve considerar blocos mínimos estáveis de trabalho.
+
+DEFINIÇÃO DE BLOCO
+
+Um BLOCO possui as seguintes características:
+
+criado quando o funcionário entra pela primeira vez no mês
+
+associado a um único turno
+
+possui um tamanho mínimo alvo (ex.: 3 dias consecutivos)
+
+existe somente durante o START
+
+NÃO substitui o modelo baseado em dias fora do START
+
+REGRAS DO BLOCO (APENAS NO START)
+🔹 Regra 1 — Criação do Bloco
+
+Quando um funcionário é escalado pela primeira vez no START:
+
+cria-se automaticamente um bloco
+
+o bloco fica vinculado ao turno inicial
+
+define-se um contador de dias restantes
+
+🔹 Regra 2 — Bloqueio Total Enquanto o Bloco Estiver Ativo
+
+Enquanto o bloco não estiver fechado:
+
+o funcionário:
+
+NÃO pode trocar de turno
+
+NÃO pode ser usado em outro turno
+
+NÃO pode ser realocado
+
+NÃO pode “pipocar”
+
+ele deve ser tratado como obrigatório naquele turno
+
+🔹 Regra 3 — Encerramento do Bloco
+
+Quando o bloco atinge seu tamanho mínimo:
+
+o bloco é encerrado
+
+o funcionário retorna ao fluxo normal
+
+regras existentes e scores continuam valendo
+
+o restante do mês segue inalterado
+
+ESCOPO EXATO DO QUE PODE SER ALTERADO
+
+✔ Criar estados auxiliares mínimos (ex.: mapa de blocos, controle diário)
+✔ Inserir verificações de regra dura
+✔ Ajustar lógica somente no START
+
+❌ NÃO converter o sistema inteiro para blocos
+❌ NÃO alterar score global
+❌ NÃO mudar pesos
+❌ NÃO mexer no balanceamento do mês
+❌ NÃO refatorar funções fora do necessário
+
+PRIORIDADE ABSOLUTA NA IMPLEMENTAÇÃO
+
+Se houver conflito entre:
+
+score
+
+fallback
+
+aleatoriedade
+
+ou regra dura
+
+👉 A REGRA DURA SEMPRE VENCE.
+
+RESULTADO ESPERADO (CRITÉRIO DE SUCESSO)
+
+Após o ajuste:
+
+nenhum funcionário aparece em dois turnos no mesmo dia
+
+nenhum funcionário ultrapassa 6 dias consecutivos sem folga
+
+a primeira semana fica estável
+
+o comportamento replica as escalas reais da empresa
+
+o restante do mês permanece inalterado
