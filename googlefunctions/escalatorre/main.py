@@ -397,7 +397,14 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
         for dia in range(1, dias_no_mes + 1):
             data_atual = datetime(ano, mes, dia).date()
             linha = {"data": str_data(ano, mes, dia), "turnos": {}}
-            disp = funcionarios.copy()
+
+            # >>> ALTERAÇÃO ACORDADA: funcionário de férias não entra no disp do dia
+            disp = [
+                f for f in funcionarios
+                if not any(s <= data_atual <= e for s, e in info["ferias"].get(str(f["id"]), []))
+            ]
+            # <<<
+
             random.shuffle(disp)
 
             for turno_i, turno in enumerate(TURNOS):
@@ -406,6 +413,11 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
                     src = duplas5 if dia <= 5 else duplas3
                     if turno_i < len(src):
                         op1, op2 = src[turno_i]
+
+                        # >>> ALTERAÇÃO ACORDADA: se dupla do start cair em férias, não pode ser usada
+                        if (op1 not in disp) or (op2 not in disp):
+                            op1, op2 = escolher_dupla_fallback(disp, disp)
+                        # <<<
                     else:
                         op1, op2 = escolher_dupla_fallback(disp, disp)
                 # ----------- fluxo normal -------------
