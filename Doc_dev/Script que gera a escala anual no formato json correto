@@ -312,7 +312,6 @@ def gerar_escala_ano(
         "estatisticas": estatisticas_finais
     }
 
-
 def main(request):
     try:
         if request.method == "OPTIONS":
@@ -382,3 +381,4 @@ def _json(obj, status=200):
         "Content-Type": "application/json",
         **_cors_headers()
     })
+
