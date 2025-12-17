@@ -15,7 +15,7 @@ gcloud functions deploy escalatorre-v1 \
   --runtime=python311 \
   --source=. \
   --entry-point=main \
-  --memory=2GB \
+  --memory=4GB \
   --timeout=3600s \
   --trigger-http \
   --max-instances=1
