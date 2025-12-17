@@ -1,0 +1,370 @@
+
+Json da tabela real do mes de março:
+
+{
+  "escala_id": null,
+  "ano": 2026,
+  "mes": 3,
+  "nome": "Escala Real Março/2026",
+  "descricao": "Importada da planilha oficial",
+  "dias": [
+    { "data": "2026-03-01", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":3,"nome":"EDUARDO","perfil":"EXP" },
+                { "id":null,"funcionario_id":9,"nome":"FELIPE","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":2,"nome":"RODRIGO","perfil":"EXP" },
+                { "id":null,"funcionario_id":8,"nome":"THAIS","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":1,"nome":"ALLAN","perfil":"EXP" },
+                { "id":null,"funcionario_id":15,"nome":"VITORIA","perfil":"AUX"} ],
+        "18H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":11,"nome":"RICHER","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-02", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":4,"nome":"MARCO","perfil":"EXP"},
+                { "id":null,"funcionario_id":5,"nome":"BRANCÃO","perfil":"EXP"} ],
+        "06H":[ { "id":null,"funcionario_id":2,"nome":"RODRIGO","perfil":"EXP"},
+                { "id":null,"funcionario_id":8,"nome":"THAIS","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":12,"nome":"GUILHERME","perfil":"AUX"} ],
+        "18H":[ { "id":null,"funcionario_id":1,"nome":"ALLAN","perfil":"EXP"},
+                { "id":null,"funcionario_id":11,"nome":"RICHER","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-03", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":4,"nome":"MARCO","perfil":"EXP"},
+                { "id":null,"funcionario_id":5,"nome":"BRANCÃO","perfil":"EXP"} ],
+        "06H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":9,"nome":"FELIPE","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":10,"nome":"B.SELAYARAN","perfil":"AUX"},
+                { "id":null,"funcionario_id":12,"nome":"GUILHERME","perfil":"AUX"},
+                { "id":null,"funcionario_id":17,"nome":"CLEITON","perfil":"SUP"},
+                { "id":null,"funcionario_id":18,"nome":"TONINHO","perfil":"SUP"} ],
+        "18H":[ { "id":null,"funcionario_id":3,"nome":"EDUARDO","perfil":"EXP"},
+                { "id":null,"funcionario_id":15,"nome":"VITORIA","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-04", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":2,"nome":"RODRIGO","perfil":"EXP"},
+                { "id":null,"funcionario_id":5,"nome":"BRANCÃO","perfil":"EXP"} ],
+        "06H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":9,"nome":"FELIPE","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":10,"nome":"B.SELAYARAN","perfil":"AUX"},
+                { "id":null,"funcionario_id":12,"nome":"GUILHERME","perfil":"AUX"},
+                { "id":null,"funcionario_id":17,"nome":"CLEITON","perfil":"SUP"},
+                { "id":null,"funcionario_id":18,"nome":"TONINHO","perfil":"SUP"} ],
+        "18H":[ { "id":null,"funcionario_id":3,"nome":"EDUARDO","perfil":"EXP"},
+                { "id":null,"funcionario_id":15,"nome":"VITORIA","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-05", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":2,"nome":"RODRIGO","perfil":"EXP"},
+                { "id":null,"funcionario_id":8,"nome":"THAIS","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":1,"nome":"ALLAN","perfil":"EXP"},
+                { "id":null,"funcionario_id":9,"nome":"FELIPE","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":11,"nome":"RICHER","perfil":"AUX"},
+                { "id":null,"funcionario_id":17,"nome":"CLEITON","perfil":"SUP"},
+                { "id":null,"funcionario_id":18,"nome":"TONINHO","perfil":"SUP"} ],
+        "18H":[ { "id":null,"funcionario_id":4,"nome":"MARCO","perfil":"EXP"},
+                { "id":null,"funcionario_id":15,"nome":"VITORIA","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-06", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":2,"nome":"RODRIGO","perfil":"EXP"},
+                { "id":null,"funcionario_id":8,"nome":"THAIS","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":1,"nome":"ALLAN","perfil":"EXP"},
+                { "id":null,"funcionario_id":9,"nome":"FELIPE","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":11,"nome":"RICHER","perfil":"AUX"},
+                { "id":null,"funcionario_id":17,"nome":"CLEITON","perfil":"SUP"},
+                { "id":null,"funcionario_id":18,"nome":"TONINHO","perfil":"SUP"} ],
+        "18H":[ { "id":null,"funcionario_id":4,"nome":"MARCO","perfil":"EXP"},
+                { "id":null,"funcionario_id":15,"nome":"VITORIA","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-07", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":10,"nome":"B.SELAYARAN","perfil":"AUX"},
+                { "id":null,"funcionario_id":8,"nome":"THAIS","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":1,"nome":"ALLAN","perfil":"EXP"},
+                { "id":null,"funcionario_id":12,"nome":"GUILHERME","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":3,"nome":"EDUARDO","perfil":"EXP"},
+                { "id":null,"funcionario_id":11,"nome":"RICHER","perfil":"AUX"},
+                { "id":null,"funcionario_id":18,"nome":"TONINHO","perfil":"SUP"},
+                { "id":null,"funcionario_id":17,"nome":"CLEITON","perfil":"SUP"} ],
+        "18H":[ { "id":null,"funcionario_id":4,"nome":"MARCO","perfil":"EXP"},
+                { "id":null,"funcionario_id":5,"nome":"BRANCÃO","perfil":"EXP"} ]
+    }},
+    { "data": "2026-03-08", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":10,"nome":"B.SELAYARAN","perfil":"AUX"},
+                { "id":null,"funcionario_id":8,"nome":"THAIS","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":1,"nome":"ALLAN","perfil":"EXP"},
+                { "id":null,"funcionario_id":12,"nome":"GUILHERME","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":3,"nome":"EDUARDO","perfil":"EXP"},
+                { "id":null,"funcionario_id":11,"nome":"RICHER","perfil":"AUX"} ],
+        "18H":[ { "id":null,"funcionario_id":4,"nome":"MARCO","perfil":"EXP"},
+                { "id":null,"funcionario_id":5,"nome":"BRANCÃO","perfil":"EXP"} ]
+    }},
+    { "data": "2026-03-09", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":10,"nome":"B.SELAYARAN","perfil":"AUX"},
+                { "id":null,"funcionario_id":9,"nome":"FELIPE","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":12,"nome":"GUILHERME","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":3,"nome":"EDUARDO","perfil":"EXP"},
+                { "id":null,"funcionario_id":15,"nome":"VITORIA","perfil":"AUX"} ],
+        "18H":[ { "id":null,"funcionario_id":2,"nome":"RODRIGO","perfil":"EXP"},
+                { "id":null,"funcionario_id":5,"nome":"BRANCÃO","perfil":"EXP"} ]
+    }},
+    { "data": "2026-03-10", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":10,"nome":"B.SELAYARAN","perfil":"AUX"},
+                { "id":null,"funcionario_id":9,"nome":"FELIPE","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":12,"nome":"GUILHERME","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":3,"nome":"EDUARDO","perfil":"EXP"},
+                { "id":null,"funcionario_id":15,"nome":"VITORIA","perfil":"AUX"},
+                { "id":null,"funcionario_id":17,"nome":"CLEITON","perfil":"SUP"},
+                { "id":null,"funcionario_id":18,"nome":"TONINHO","perfil":"SUP"} ],
+        "18H":[ { "id":null,"funcionario_id":2,"nome":"RODRIGO","perfil":"EXP"},
+                { "id":null,"funcionario_id":5,"nome":"BRANCÃO","perfil":"EXP"} ]
+    }},
+    { "data": "2026-03-11", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":1,"nome":"ALLAN","perfil":"EXP"},
+                { "id":null,"funcionario_id":9,"nome":"FELIPE","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":11,"nome":"RICHER","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":4,"nome":"MARCO","perfil":"EXP"},
+                { "id":null,"funcionario_id":15,"nome":"VITORIA","perfil":"AUX"},
+                { "id":null,"funcionario_id":17,"nome":"CLEITON","perfil":"SUP"},
+                { "id":null,"funcionario_id":18,"nome":"TONINHO","perfil":"SUP"} ],
+        "18H":[ { "id":null,"funcionario_id":2,"nome":"RODRIGO","perfil":"EXP"},
+                { "id":null,"funcionario_id":8,"nome":"THAIS","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-12", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":1,"nome":"ALLAN","perfil":"EXP"},
+                { "id":null,"funcionario_id":9,"nome":"FELIPE","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":11,"nome":"RICHER","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":4,"nome":"MARCO","perfil":"EXP"},
+                { "id":null,"funcionario_id":15,"nome":"VITORIA","perfil":"AUX"},
+                { "id":null,"funcionario_id":17,"nome":"CLEITON","perfil":"SUP"},
+                { "id":null,"funcionario_id":18,"nome":"TONINHO","perfil":"SUP"} ],
+        "18H":[ { "id":null,"funcionario_id":2,"nome":"RODRIGO","perfil":"EXP"},
+                { "id":null,"funcionario_id":8,"nome":"THAIS","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-13", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":1,"nome":"ALLAN","perfil":"EXP"},
+                { "id":null,"funcionario_id":12,"nome":"GUILHERME","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":3,"nome":"EDUARDO","perfil":"EXP"},
+                { "id":null,"funcionario_id":11,"nome":"RICHER","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":4,"nome":"MARCO","perfil":"EXP"},
+                { "id":null,"funcionario_id":5,"nome":"BRANCÃO","perfil":"EXP"},
+                { "id":null,"funcionario_id":17,"nome":"CLEITON","perfil":"SUP"},
+                { "id":null,"funcionario_id":18,"nome":"TONINHO","perfil":"SUP"} ],
+        "18H":[ { "id":null,"funcionario_id":10,"nome":"B.SELAYARAN","perfil":"AUX"},
+                { "id":null,"funcionario_id":8,"nome":"THAIS","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-14", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":1,"nome":"ALLAN","perfil":"EXP"},
+                { "id":null,"funcionario_id":12,"nome":"GUILHERME","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":3,"nome":"EDUARDO","perfil":"EXP"},
+                { "id":null,"funcionario_id":11,"nome":"RICHER","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":4,"nome":"MARCO","perfil":"EXP"},
+                { "id":null,"funcionario_id":5,"nome":"BRANCÃO","perfil":"EXP"},
+                { "id":null,"funcionario_id":18,"nome":"TONINHO","perfil":"SUP"},
+                { "id":null,"funcionario_id":17,"nome":"CLEITON","perfil":"SUP"} ],
+        "18H":[ { "id":null,"funcionario_id":10,"nome":"B.SELAYARAN","perfil":"AUX"},
+                { "id":null,"funcionario_id":8,"nome":"THAIS","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-15", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":12,"nome":"GUILHERME","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":3,"nome":"EDUARDO","perfil":"EXP"},
+                { "id":null,"funcionario_id":15,"nome":"VITORIA","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":2,"nome":"RODRIGO","perfil":"EXP"},
+                { "id":null,"funcionario_id":5,"nome":"BRANCÃO","perfil":"EXP"} ],
+        "18H":[ { "id":null,"funcionario_id":10,"nome":"B.SELAYARAN","perfil":"AUX"},
+                { "id":null,"funcionario_id":9,"nome":"FELIPE","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-16", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":12,"nome":"GUILHERME","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":3,"nome":"EDUARDO","perfil":"EXP"},
+                { "id":null,"funcionario_id":15,"nome":"VITORIA","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":2,"nome":"RODRIGO","perfil":"EXP"},
+                { "id":null,"funcionario_id":5,"nome":"BRANCÃO","perfil":"EXP"} ],
+        "18H":[ { "id":null,"funcionario_id":10,"nome":"B.SELAYARAN","perfil":"AUX"},
+                { "id":null,"funcionario_id":9,"nome":"FELIPE","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-17", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":11,"nome":"RICHER","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":4,"nome":"MARCO","perfil":"EXP"},
+                { "id":null,"funcionario_id":15,"nome":"VITORIA","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":2,"nome":"RODRIGO","perfil":"EXP"},
+                { "id":null,"funcionario_id":8,"nome":"THAIS","perfil":"AUX"},
+                { "id":null,"funcionario_id":17,"nome":"CLEITON","perfil":"SUP"},
+                { "id":null,"funcionario_id":18,"nome":"TONINHO","perfil":"SUP"} ],
+        "18H":[ { "id":null,"funcionario_id":1,"nome":"ALLAN","perfil":"EXP"},
+                { "id":null,"funcionario_id":9,"nome":"FELIPE","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-18", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":11,"nome":"RICHER","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":4,"nome":"MARCO","perfil":"EXP"},
+                { "id":null,"funcionario_id":15,"nome":"VITORIA","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":2,"nome":"RODRIGO","perfil":"EXP"},
+                { "id":null,"funcionario_id":8,"nome":"THAIS","perfil":"AUX"},
+                { "id":null,"funcionario_id":17,"nome":"CLEITON","perfil":"SUP"},
+                { "id":null,"funcionario_id":18,"nome":"TONINHO","perfil":"SUP"} ],
+        "18H":[ { "id":null,"funcionario_id":1,"nome":"ALLAN","perfil":"EXP"},
+                { "id":null,"funcionario_id":9,"nome":"FELIPE","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-19", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":3,"nome":"EDUARDO","perfil":"EXP"},
+                { "id":null,"funcionario_id":11,"nome":"RICHER","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":4,"nome":"MARCO","perfil":"EXP"},
+                { "id":null,"funcionario_id":5,"nome":"BRANCÃO","perfil":"EXP"} ],
+        "12H":[ { "id":null,"funcionario_id":10,"nome":"B.SELAYARAN","perfil":"AUX"},
+                { "id":null,"funcionario_id":8,"nome":"THAIS","perfil":"AUX"},
+                { "id":null,"funcionario_id":17,"nome":"CLEITON","perfil":"SUP"},
+                { "id":null,"funcionario_id":18,"nome":"TONINHO","perfil":"SUP"} ],
+        "18H":[ { "id":null,"funcionario_id":1,"nome":"ALLAN","perfil":"EXP"},
+                { "id":null,"funcionario_id":12,"nome":"GUILHERME","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-20", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":3,"nome":"EDUARDO","perfil":"EXP"},
+                { "id":null,"funcionario_id":11,"nome":"RICHER","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":4,"nome":"MARCO","perfil":"EXP"},
+                { "id":null,"funcionario_id":5,"nome":"BRANCÃO","perfil":"EXP"} ],
+        "12H":[ { "id":null,"funcionario_id":10,"nome":"B.SELAYARAN","perfil":"AUX"},
+                { "id":null,"funcionario_id":8,"nome":"THAIS","perfil":"AUX"},
+                { "id":null,"funcionario_id":17,"nome":"CLEITON","perfil":"SUP"},
+                { "id":null,"funcionario_id":18,"nome":"TONINHO","perfil":"SUP"} ],
+        "18H":[ { "id":null,"funcionario_id":1,"nome":"ALLAN","perfil":"EXP"},
+                { "id":null,"funcionario_id":12,"nome":"GUILHERME","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-21", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":3,"nome":"EDUARDO","perfil":"EXP"},
+                { "id":null,"funcionario_id":15,"nome":"VITORIA","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":2,"nome":"RODRIGO","perfil":"EXP"},
+                { "id":null,"funcionario_id":5,"nome":"BRANCÃO","perfil":"EXP"} ],
+        "12H":[ { "id":null,"funcionario_id":10,"nome":"B.SELAYARAN","perfil":"AUX"},
+                { "id":null,"funcionario_id":9,"nome":"FELIPE","perfil":"AUX"},
+                { "id":null,"funcionario_id":18,"nome":"TONINHO","perfil":"SUP"},
+                { "id":null,"funcionario_id":17,"nome":"CLEITON","perfil":"SUP"} ],
+        "18H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":12,"nome":"GUILHERME","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-22", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":3,"nome":"EDUARDO","perfil":"EXP"},
+                { "id":null,"funcionario_id":15,"nome":"VITORIA","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":2,"nome":"RODRIGO","perfil":"EXP"},
+                { "id":null,"funcionario_id":5,"nome":"BRANCÃO","perfil":"EXP"} ],
+        "12H":[ { "id":null,"funcionario_id":10,"nome":"B.SELAYARAN","perfil":"AUX"},
+                { "id":null,"funcionario_id":9,"nome":"FELIPE","perfil":"AUX"} ],
+        "18H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":12,"nome":"GUILHERME","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-23", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":4,"nome":"MARCO","perfil":"EXP"},
+                { "id":null,"funcionario_id":15,"nome":"VITORIA","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":2,"nome":"RODRIGO","perfil":"EXP"},
+                { "id":null,"funcionario_id":8,"nome":"THAIS","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":1,"nome":"ALLAN","perfil":"EXP"},
+                { "id":null,"funcionario_id":9,"nome":"FELIPE","perfil":"AUX"} ],
+        "18H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":11,"nome":"RICHER","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-24", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":4,"nome":"MARCO","perfil":"EXP"},
+                { "id":null,"funcionario_id":15,"nome":"VITORIA","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":2,"nome":"RODRIGO","perfil":"EXP"},
+                { "id":null,"funcionario_id":8,"nome":"THAIS","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":1,"nome":"ALLAN","perfil":"EXP"},
+                { "id":null,"funcionario_id":9,"nome":"FELIPE","perfil":"AUX"},
+                { "id":null,"funcionario_id":17,"nome":"CLEITON","perfil":"SUP"},
+                { "id":null,"funcionario_id":18,"nome":"TONINHO","perfil":"SUP"} ],
+        "18H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":11,"nome":"RICHER","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-25", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":4,"nome":"MARCO","perfil":"EXP"},
+                { "id":null,"funcionario_id":5,"nome":"BRANCÃO","perfil":"EXP"} ],
+        "06H":[ { "id":null,"funcionario_id":10,"nome":"B.SELAYARAN","perfil":"AUX"},
+                { "id":null,"funcionario_id":8,"nome":"THAIS","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":1,"nome":"ALLAN","perfil":"EXP"},
+                { "id":null,"funcionario_id":12,"nome":"GUILHERME","perfil":"AUX"},
+                { "id":null,"funcionario_id":17,"nome":"CLEITON","perfil":"SUP"},
+                { "id":null,"funcionario_id":18,"nome":"TONINHO","perfil":"SUP"} ],
+        "18H":[ { "id":null,"funcionario_id":3,"nome":"EDUARDO","perfil":"EXP"},
+                { "id":null,"funcionario_id":11,"nome":"RICHER","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-26", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":4,"nome":"MARCO","perfil":"EXP"},
+                { "id":null,"funcionario_id":5,"nome":"BRANCÃO","perfil":"EXP"} ],
+        "06H":[ { "id":null,"funcionario_id":10,"nome":"B.SELAYARAN","perfil":"AUX"},
+                { "id":null,"funcionario_id":8,"nome":"THAIS","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":1,"nome":"ALLAN","perfil":"EXP"},
+                { "id":null,"funcionario_id":12,"nome":"GUILHERME","perfil":"AUX"},
+                { "id":null,"funcionario_id":17,"nome":"CLEITON","perfil":"SUP"},
+                { "id":null,"funcionario_id":18,"nome":"TONINHO","perfil":"SUP"} ],
+        "18H":[ { "id":null,"funcionario_id":3,"nome":"EDUARDO","perfil":"EXP"},
+                { "id":null,"funcionario_id":11,"nome":"RICHER","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-27", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":2,"nome":"RODRIGO","perfil":"EXP"},
+                { "id":null,"funcionario_id":5,"nome":"BRANCÃO","perfil":"EXP"} ],
+        "06H":[ { "id":null,"funcionario_id":10,"nome":"B.SELAYARAN","perfil":"AUX"},
+                { "id":null,"funcionario_id":9,"nome":"FELIPE","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":12,"nome":"GUILHERME","perfil":"AUX"},
+                { "id":null,"funcionario_id":17,"nome":"CLEITON","perfil":"SUP"},
+                { "id":null,"funcionario_id":18,"nome":"TONINHO","perfil":"SUP"} ],
+        "18H":[ { "id":null,"funcionario_id":3,"nome":"EDUARDO","perfil":"EXP"},
+                { "id":null,"funcionario_id":15,"nome":"VITORIA","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-28", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":2,"nome":"RODRIGO","perfil":"EXP"},
+                { "id":null,"funcionario_id":5,"nome":"BRANCÃO","perfil":"EXP"} ],
+        "06H":[ { "id":null,"funcionario_id":10,"nome":"B.SELAYARAN","perfil":"AUX"},
+                { "id":null,"funcionario_id":9,"nome":"FELIPE","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":12,"nome":"GUILHERME","perfil":"AUX"},
+                { "id":null,"funcionario_id":18,"nome":"TONINHO","perfil":"SUP"},
+                { "id":null,"funcionario_id":17,"nome":"CLEITON","perfil":"SUP"} ],
+        "18H":[ { "id":null,"funcionario_id":3,"nome":"EDUARDO","perfil":"EXP"},
+                { "id":null,"funcionario_id":15,"nome":"VITORIA","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-29", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":2,"nome":"RODRIGO","perfil":"EXP"},
+                { "id":null,"funcionario_id":8,"nome":"THAIS","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":1,"nome":"ALLAN","perfil":"EXP"},
+                { "id":null,"funcionario_id":9,"nome":"FELIPE","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":11,"nome":"RICHER","perfil":"AUX"} ],
+        "18H":[ { "id":null,"funcionario_id":4,"nome":"MARCO","perfil":"EXP"},
+                { "id":null,"funcionario_id":15,"nome":"VITORIA","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-30", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":2,"nome":"RODRIGO","perfil":"EXP"},
+                { "id":null,"funcionario_id":8,"nome":"THAIS","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":1,"nome":"ALLAN","perfil":"EXP"},
+                { "id":null,"funcionario_id":9,"nome":"FELIPE","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":16,"nome":"B.MACHADO","perfil":"EXP"},
+                { "id":null,"funcionario_id":11,"nome":"RICHER","perfil":"AUX"} ],
+        "18H":[ { "id":null,"funcionario_id":4,"nome":"MARCO","perfil":"EXP"},
+                { "id":null,"funcionario_id":15,"nome":"VITORIA","perfil":"AUX"} ]
+    }},
+    { "data": "2026-03-31", "turnos": {
+        "00H":[ { "id":null,"funcionario_id":10,"nome":"B.SELAYARAN","perfil":"AUX"},
+                { "id":null,"funcionario_id":8,"nome":"THAIS","perfil":"AUX"} ],
+        "06H":[ { "id":null,"funcionario_id":1,"nome":"ALLAN","perfil":"EXP"},
+                { "id":null,"funcionario_id":12,"nome":"GUILHERME","perfil":"AUX"} ],
+        "12H":[ { "id":null,"funcionario_id":3,"nome":"EDUARDO","perfil":"EXP"},
+                { "id":null,"funcionario_id":11,"nome":"RICHER","perfil":"AUX"},
+                { "id":null,"funcionario_id":17,"nome":"CLEITON","perfil":"SUP"},
+                { "id":null,"funcionario_id":18,"nome":"TONINHO","perfil":"SUP"} ],
+        "18H":[ { "id":null,"funcionario_id":13,"nome":"B.HORNES","perfil":"AUX"},
+                { "id":null,"funcionario_id":5,"nome":"BRANCÃO","perfil":"EXP"} ]
+    }}
+  ],
+  "observacoes": [
+    "01/03 - B.HORNES em férias (30 dias)",
+    "03/03 - B.SELAYARAN retorna de férias",
+    "31/03 - B.HORNES retorna de férias"
+  ]
+}
+

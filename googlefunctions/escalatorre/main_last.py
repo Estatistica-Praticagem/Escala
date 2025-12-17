@@ -3,7 +3,6 @@
 # Versão revisada em 2025-12-10  (patch “start-strategy” 2025-12-15)
 # Hot-fix “START-BLOCO” 2025-12-16 – elimina pipocar na 1ª semana criando blocos mínimos de 3 dias
 # Patch “continuidade” 2025-12-17 – suporte completo à geração contínua
-# Patch “continuidade-seq” 2025-12-17 – respeita sequência e turno do mês anterior
 #
 # Regras duras PRIORITÁRIAS
 #     1. Respeita férias, datas e turnos proibidos
@@ -167,6 +166,7 @@ def score_func(params, func, turno, horas, consec, dia, prefs,
     fid = str(func["id"])
     s = 0
 
+    # penalidade de continuidade apenas na 1ª semana
     if estado_continuo and dia <= START_WINDOW_DIAS:
         s += estado_continuo["penalidade_start"].get(fid, 0) * 800
 
@@ -259,6 +259,8 @@ def escolher_func(pool, turno, horas, consec, dia, prefs,
 #   FUNÇÃO AUX – duplas iniciais
 # ========================
 def gerar_duplas_iniciais(funcionarios, perfis):
+    """Tenta formar 4 duplas EXP/AUX; se não houver gente suficiente
+       preenche repetições de forma segura."""
     exp = perfis["EXP"][:]
     aux = perfis["AUX"][:]
     random.shuffle(exp)
@@ -367,9 +369,7 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
     melhor_score, melhor_dias, melhor_outros = float("inf"), None, {}
 
     for tentativa in range(tentativas):
-        # --------------------------------------------
-        # ► Estado inicial trazido da escala anterior
-        # --------------------------------------------
+        # inicia consec / ultimo_turno com estado contínuo, se houver
         c = {
             str(f["id"]): estado_continuo["consec"].get(str(f["id"]), 0) if estado_continuo else 0
             for f in funcionarios
@@ -386,25 +386,14 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
         seq_folga    = {str(f["id"]): 0 for f in funcionarios}
         parceiro_ult = {str(f["id"]): None for f in funcionarios}
 
-        # --- BLOCO: já inicia respeitando sequências vigentes --------------
+        # --- NOVO MAPA DE BLOCOS (START-BLOCO) -------------------------------
         bloco = {}
-        if estado_continuo:
-            for fid, cons in estado_continuo["consec"].items():
-                if cons > 0 and estado_continuo["ultimo_turno"].get(fid):
-                    rem = max(0, BLOCK_MIN_SIZE - cons)
-                    bloco[fid] = {
-                        "turno": estado_continuo["ultimo_turno"][fid],
-                        "remaining": rem
-                    }
-        # ------------------------------------------------------------------
+        # ---------------------------------------------------------------------
 
         dias_mes = []
 
         duplas5, duplas3 = gerar_duplas_iniciais(funcionarios, perfis)
-        USE_START_STRATEGY = (
-            not estado_continuo and  # ► desliga estratégia quando há continuidade
-            len(perfis["EXP"]) >= 4 and len(perfis["AUX"]) >= 4
-        )
+        USE_START_STRATEGY = len(perfis["EXP"]) >= 4 and len(perfis["AUX"]) >= 4
 
         for dia in range(1, dias_no_mes + 1):
             data_atual = datetime(ano, mes, dia).date()
@@ -530,6 +519,7 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
 #   FUNÇÃO AUX – dupla fallback
 # ========================
 def escolher_dupla_fallback(disp, aux_pool):
+    """Retorna (EXP, AUX) sempre válidos; evita repetir pessoa na mesma dupla."""
     if not disp:
         disp[:] = aux_pool or funcionarios
     op1 = random.choice(disp)
@@ -581,12 +571,14 @@ def main(request):
             "restricoes":   parse_restricoes(payload.get("restricoes")),
         }
 
+        # --- CONTINUIDADE --------------------------------------------------
         estado_continuo = None
         if payload.get("gerar_continua"):
             estado_continuo = preparar_estado_continuo(
                 payload.get("escala_mes_anterior"),
                 funcionarios
             )
+        # -------------------------------------------------------------------
 
         if payload.get("tipo", "ano") == "mes":
             res = gerar_escala_mes(
@@ -610,6 +602,7 @@ def main(request):
 # ==========================
 #   Prepara start continuo
 # ==========================
+
 def preparar_estado_continuo(escala_mes_anterior, funcionarios):
     """
     Lê a escala do mês anterior (inteira) e reconstrói o estado inicial
