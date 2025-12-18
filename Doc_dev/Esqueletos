@@ -1,0 +1,117 @@
+Modelo 4x1 (reduzido — 1 vaga no 00–06)
+Ideia: mantém 2 pessoas nos turnos de pico (06–12 / 12–18 / 18–00), mas deixa a madrugada 00–06 com apenas 1 pessoa. É o esqueleto mais “leve” quando falta gente.
+
+Quando usar: semana/mês com menos disponibilidade, quando você precisa reduzir demanda sem quebrar o padrão de rotação.
+
+Diagrama (esqueleto 4x1):
+
+00h x 06h	06h x 12h	06h x 12h	12h x 18h	12h x 18h	18h x 00h	18h x 00h
+I	C	J	D	K	A	H
+I	C	J	E	L	A	H
+I	D	K	E	L	A	H
+J	D	K	E	L	A	H
+J	D	K	E	L	B	I
+J	D	K	A	H	B	I
+J	E	L	A	H	B	I
+K	E	L	A	H	B	I
+K	E	L	A	H	C	J
+K	E	L	B	I	C	J
+K	A	H	B	I	C	J
+L	A	H	B	I	C	J
+L	A	H	B	I	D	K
+L	A	H	C	J	D	K
+L	B	I	C	J	D	K
+H	B	I	C	J	D	K
+H	B	I	C	J	E	L
+H	B	I	D	K	E	L
+H	C	J	D	K	E	L
+I	C	J	D	K	E	L
+I	C	J	D	K	A	H
+I	C	J	E	L	A	H
+I	D	K	E	L	A	H
+J	D	K	E	L	A	H
+J	D	K	E	L	B	I
+J	D	K	A	H	B	I
+J	E	L	A	H	B	I
+K	E	L	A	H	B	I
+K	E	L	A	H	C	J
+K	E	L	B	I	C	J
+K	A	H	B	I	C	J
+Modelo 4x2 (normal — 2 vagas por turno, “blocos de 2 dias iguais”)
+Ideia: escala completa (8 vagas/dia), mas o esqueleto repete a mesma distribuição por 2 dias, criando “blocos” que ajudam a manter estabilidade e reduzir troca diária.
+
+Quando usar: disponibilidade ok, e você quer previsibilidade (muito bom pra manter padrão e facilitar controle).
+
+Diagrama (esqueleto 4x2):
+
+Data	00h x 06h	00h x 06h	06h x 12h	06h x 12h	12h x 18h	12h x 18h	18h x 00h	18h x 00h
+1/10/2021	B	I	D	J	E	L	A	M
+2/10/2021	B	I	D	J	E	L	A	M
+3/10/2021	C	I	D	K	F	L	A	H
+4/10/2021	C	I	D	K	F	L	A	H
+5/10/2021	C	J	E	K	F	M	B	H
+6/10/2021	C	J	E	K	F	M	B	H
+7/10/2021	D	J	E	L	A	M	B	I
+8/10/2021	D	J	E	L	A	M	B	I
+9/10/2021	D	K	F	L	A	H	C	I
+10/10/2021	D	K	F	L	A	H	C	I
+11/10/2021	E	K	F	M	B	H	C	J
+12/10/2021	E	K	F	M	B	H	C	J
+13/10/2021	E	L	A	M	B	I	D	J
+14/10/2021	E	L	A	M	B	I	D	J
+15/10/2021	F	L	A	H	C	I	D	K
+16/10/2021	F	L	A	H	C	I	D	K
+17/10/2021	F	M	B	H	C	J	E	K
+18/10/2021	F	M	B	H	C	J	E	K
+19/10/2021	A	M	B	I	D	J	E	L
+20/10/2021	A	M	B	I	D	J	E	L
+21/10/2021	A	H	C	I	D	K	F	L
+22/10/2021	A	H	C	I	D	K	F	L
+23/10/2021	B	H	C	J	E	K	F	M
+24/10/2021	B	H	C	J	E	K	F	M
+25/10/2021	B	I	D	J	E	L	A	M
+26/10/2021	B	I	D	J	E	L	A	M
+27/10/2021	C	I	D	K	F	L	A	H
+28/10/2021	C	I	D	K	F	L	A	H
+29/10/2021	C	J	E	K	F	M	B	H
+30/10/2021	C	J	E	K	F	M	B	H
+31/10/2021	D	J	E	L	A	M	B	I
+Modelo 4x3 (normal — 2 vagas por turno, rotação “mais espalhada”)
+Ideia: escala completa (8 vagas/dia) com mais gente no rodízio (entra “N”) e progressão diária mais “distribuída”, geralmente ajudando a abrir mais folgas quando tem pessoal suficiente.
+
+Quando usar: equipe completa (ou semanas com mais disponibilidade), visando 4 dias/semana para a maioria e folgas 2–3.
+
+Diagrama (esqueleto 4x3):
+
+Data	00h x 06h	00h x 06h	06h x 12h	06h x 12h	12h x 18h	12h x 18h	18h x 00h	18h x 00h
+1/10/2021	B	I	D	K	F	L	A	N
+2/10/2021	C	I	D	K	F	M	A	N
+3/10/2021	C	I	E	K	F	M	A	H
+4/10/2021	C	J	E	K	G	M	A	H
+5/10/2021	C	J	E	L	G	M	B	H
+6/10/2021	D	J	E	L	G	N	B	H
+7/10/2021	D	J	F	L	G	N	B	I
+8/10/2021	D	K	F	L	A	N	B	I
+9/10/2021	D	K	F	M	A	N	C	I
+10/10/2021	E	K	F	M	A	H	C	I
+11/10/2021	E	K	G	M	A	H	C	J
+12/10/2021	E	L	G	M	B	H	C	J
+13/10/2021	E	L	G	N	B	H	D	J
+14/10/2021	F	L	G	N	B	I	D	J
+15/10/2021	F	L	A	N	B	I	D	K
+16/10/2021	F	M	A	N	C	I	D	K
+17/10/2021	F	M	A	H	C	I	E	K
+18/10/2021	G	M	A	H	C	J	E	K
+19/10/2021	G	M	B	H	C	J	E	L
+20/10/2021	G	N	B	H	D	J	E	L
+21/10/2021	G	N	B	I	D	J	F	L
+22/10/2021	A	N	B	I	D	K	F	L
+23/10/2021	A	N	C	I	D	K	F	M
+24/10/2021	A	H	C	I	E	K	F	M
+25/10/2021	A	H	C	J	E	K	G	M
+26/10/2021	B	H	C	J	E	L	G	M
+27/10/2021	B	H	D	J	E	L	G	N
+28/10/2021	B	I	D	J	F	L	G	N
+29/10/2021	B	I	D	K	F	L	A	N
+30/10/2021	C	I	D	K	F	M	A	N
+31/10/2021	C	I	E	K	F	M	A	H

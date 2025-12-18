@@ -1,0 +1,5 @@
+Nova descrição:
+
+Implementar um sistema simples onde apenas verifica o numero de funcionarios disponiveis e apartir disso define qual padrão usar se é 4 ou 5 dias de seguencia e com base nisso de é 2 ou 3 dias de folga entre os turnos.
+
+Sempre q ouver alterção no numero de funcionários disponiveis se aplica o ajuste nos ciclos q vão iniciar preservando o ciclo atual por usuário.

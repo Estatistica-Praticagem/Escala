@@ -1,0 +1,182 @@
+Regras do Gerador de Escalas EXP/AUX (Especificação)
+1) Conceitos e definições
+
+Turnos (fixos):
+
+00H, 06H, 12H, 18H
+
+Ciclo de rotação de turno (entre blocos):
+
+00H → 18H → 12H → 06H → 00H
+
+Implementado como:
+
+CICLO_TURNOS = {"00H":"18H","18H":"12H","12H":"06H","06H":"00H"}
+
+Bloco de trabalho (sequência):
+
+Série de dias consecutivos em que o funcionário trabalha (sem folga no meio).
+
+Bloco de folga (sequência de folga):
+
+Série de dias consecutivos em que o funcionário não trabalha.
+
+Escala “real” alvo:
+
+Padrão dominante 4 dias trabalhando + 2 dias de folga (4x2)
+
+Turno tende a ficar estável dentro do bloco
+
+Troca de turno acontece na virada de bloco, seguindo o ciclo de 4 turnos.
+
+2) Regras duras (Hard constraints) — obrigatórias
+H1) Respeitar férias
+
+Se o funcionário está em férias na data, ele não pode ser escalado.
+
+H2) Respeitar restrições por funcionário
+
+Se existirem restrições, o funcionário não pode ser escalado se violar:
+
+Dia da semana proibido
+
+Turno proibido
+
+Data proibida
+
+Turnos permitidos por dia da semana (se houver regra, só pode escolher entre os permitidos)
+
+H3) Manter o mesmo turno durante sequência de trabalho
+
+Se o funcionário está em sequência (consec > 0), ele tem que manter o mesmo turno do dia anterior.
+
+H4) Trocar turno somente após folga, seguindo o ciclo 4-turnos
+
+Se o funcionário está voltando de folga (consec == 0) e tem ultimo_turno, ele só pode voltar no turno:
+
+CICLO_TURNOS[ultimo_turno]
+
+H5) Limite máximo de dias consecutivos trabalhando
+
+Máximo de dias seguidos de trabalho:
+
+Na 1ª semana (janela inicial): até 6 (regra “start window”)
+
+Depois: até 6 (regra geral)
+
+Obs.: o comentário antigo “3 dias na primeira semana” não está valendo como hard no seu script atual; o limite efetivo está como 6.
+
+H6) Limite máximo por turno no mês
+
+Um funcionário não pode ultrapassar 8 dias no mesmo turno dentro do mês.
+
+H7) Funcionários processáveis (pool)
+
+Somente funcionários com perfil EXP ou AUX entram no gerador.
+
+Funcionários fixos / SUP / perfis fora disso devem ser ignorados pelo algoritmo.
+
+H8) Dupla por turno
+
+Para cada turno do dia, devem ser escaladas 2 pessoas (normalmente 1 EXP e 1 AUX; o sistema tenta manter isso).
+
+H9) Um funcionário não deve trabalhar em mais de um turno no mesmo dia
+
+Regra operacional desejada: ninguém pode fazer 2 turnos no mesmo dia.
+
+Se ocorrer falta extrema de pessoal, isso pode ser permitido somente como “último recurso”, com alerta.
+
+(Essa é a regra que você estava prestes a pedir para automatizar no prompt.)
+
+3) Regras suaves (Soft constraints) — objetivos com pontuação
+
+O gerador usa score: quanto menor o score, melhor.
+Penalidades aumentam score. Bônus reduzem score (ou seja, valores negativos ajudam).
+
+S1) Preferência de turno
+
+Se o funcionário prefere um turno e for escalado nele, ganha bônus (melhora score).
+
+S2) Padrão 4x2 como comportamento dominante
+
+Objetivo: o algoritmo deve “tentar” formar blocos como:
+
+4 dias seguidos trabalhando
+
+2 dias seguidos de folga
+
+No trabalho (sequência):
+
+Incentivar continuar até completar 4 dias
+
+Dar bônus forte ao atingir 4
+
+Penalizar passar de 4 (para evitar 5/6 como padrão)
+
+Na folga (sequência de folga):
+
+Penalizar alternância “1 trabalho / 1 folga” (intercalado)
+
+Bonificar folga quando acumulada (especialmente ≥ 2)
+
+S3) Balanceamento de turnos por pessoa (aproximar dias/4)
+
+Objetivo: cada pessoa fique perto de (dias trabalhados) / 4 em cada turno.
+
+Penalizar desvio (ex.: crescer demais em um turno e ficar curto em outro)
+
+S4) Evitar “turno zerado” no mês
+
+A partir de certo ponto do mês (ex.: dia >= 10):
+
+se a pessoa ainda não fez aquele turno (contagem 0), isso deve virar bônus quando ela for escalada nesse turno (para completar os 4)
+
+S5) Minimizar trocas de turno
+
+Trocar de turno é indesejado e aumenta score (mas a troca “correta” é controlada pelo ciclo após folga).
+
+S6) Evitar repetir o mesmo parceiro
+
+Penalizar repetir o mesmo parceiro em dias consecutivos (no seu caso o peso está 0, então é neutro — mas a regra existe).
+
+S7) Balancear horas acumuladas (multi-mês / continuidade)
+
+Se há histórico de horas acumuladas do ano, penalizar aumentar desigualdade (buscar equilíbrio).
+
+S8) Balancear dias trabalhados por pessoa (faixa 19–22)
+
+Objetivo: concentrar a maioria em ~20–21 dias trabalhados/mês, evitando casos muito discrepantes (tipo 26 vs 18).
+
+Penalizar distância do alvo (ex.: |dias_trabalhados - 21|).
+
+S9) Continuidade (quando gerar mês contínuo)
+
+Se estiver gerando com continuidade, aplicar penalidade para evitar “pipocar” na 1ª semana e respeitar sequência/turno do mês anterior.
+
+4) Prioridade (ordem de decisão)
+
+Hard rules sempre vêm primeiro (se viola → candidato proibido).
+
+Entre candidatos válidos, o algoritmo escolhe pelo menor score (soft rules).
+
+5) Resultado esperado (critérios de qualidade)
+
+Uma escala “boa” deve:
+
+Respeitar férias e restrições
+
+Evitar >6 dias consecutivos
+
+Manter turno fixo dentro do bloco
+
+Trocar turno após folga seguindo 00→18→12→06→00
+
+Produzir padrão majoritário 4x2
+
+Distribuir turnos por pessoa de forma próxima a dias/4
+
+Evitar turno zerado
+
+Manter 19–22 dias por pessoa sempre que possível
+
+Nunca colocar a mesma pessoa em 2 turnos no mesmo dia (exceto emergência)
