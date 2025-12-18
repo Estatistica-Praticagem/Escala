@@ -4,7 +4,7 @@
 #
 # Regras duras PRIORITÁRIAS
 #     1. Respeita férias, datas e turnos proibidos
-#     2. Máx. 6 dias consecutivos de trabalho   (3 logo na 1ª semana)
+#     2. Máx. 6 dias consecutivos de trabalho   (6 logo na 1ª semana)
 #     3. Durante sequência (consec > 0) o funcionário deve manter o MESMO turno
 #     4. Após folga (consec == 0) deve seguir o ciclo 00→18→12→06→00
 #     5. Máximo 8 dias por turno/mês (parâmetro)
@@ -169,9 +169,9 @@ def score_func(params, func, turno, horas, consec, dia, prefs,
     if turno in prefs.get(fid, set()):
         s += SOFT_WEIGHTS["preferencia_turno"]
 
-    # penalidade por troca precoce de turno
+    # penalidade por troca precoce de turno (aplica apenas se já estava em sequência)
     ut_prev = ultimo_turno.get(fid)
-    if ut_prev is not None and turno != ut_prev and stats[fid][ut_prev] < 4 and dia > START_WINDOW_DIAS:
+    if consec[fid] > 0 and ut_prev is not None and turno != ut_prev and stats[fid][ut_prev] < 4 and dia > START_WINDOW_DIAS:
         s += 250
 
     # balanceamento por turno (target dias/4 usando stats)
@@ -185,8 +185,8 @@ def score_func(params, func, turno, horas, consec, dia, prefs,
     if dia >= 10 and stats[fid][turno] == 0:
         s -= SOFT_WEIGHTS["penaliza_ausencia_turno"]
 
-    # troca de turno indesejada
-    if ultimo_turno.get(fid) and ultimo_turno[fid] != turno:
+    # troca de turno indesejada (somente se vinha trabalhando consecutivamente)
+    if consec[fid] > 0 and ultimo_turno.get(fid) and ultimo_turno[fid] != turno:
         s += SOFT_WEIGHTS["troca_de_turno"]
 
     # hard-limit nearing warning
@@ -220,7 +220,7 @@ def score_func(params, func, turno, horas, consec, dia, prefs,
     if mes_acum_horas and fid in mes_acum_horas:
         s += (mes_acum_horas[fid] / 10) * SOFT_WEIGHTS["desequilibrio_horas"]
 
-    # balanceamento dias trabalhados (real)
+    # balanceamento dias trabalhados (real - só mês)
     futura_dias_trab = dias_trab_mes.get(fid, 0) + 1
     diff_days = abs(futura_dias_trab - 21)
     s += diff_days * 45
@@ -395,6 +395,7 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
         stats        = {str(f["id"]): {t: 0 for t in TURNOS} for f in funcionarios}
         h_local      = dict(horas)
         d_local      = dict(dias_trab)
+        dias_trab_mes = {str(f["id"]): 0 for f in funcionarios}  # contador mensal
         seq_trab     = {str(f["id"]): 0 for f in funcionarios}
         seq_folga    = {str(f["id"]): 0 for f in funcionarios}
         parceiro_ult = {str(f["id"]): None for f in funcionarios}
@@ -480,12 +481,12 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
                                                 u_turno, stats, params, data_atual, info,
                                                 mes_acum_horas, seq_trab, seq_folga,
                                                 parceiro_ult, None, estado_continuo,
-                                                dias_trab_mes=d_local)
+                                                dias_trab_mes=dias_trab_mes)
                             op2 = escolher_func(aux_pool, turno, h_local, c, dia, info["preferencias"],
                                                 u_turno, stats, params, data_atual, info,
                                                 mes_acum_horas, seq_trab, seq_folga,
                                                 parceiro_ult, op1["id"], estado_continuo,
-                                                dias_trab_mes=d_local)
+                                                dias_trab_mes=dias_trab_mes)
                     candidatos = [op1, op2]
                     for op in candidatos:
                         if op in disp and op not in dupla and len(dupla) < 2:
@@ -510,11 +511,7 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
 
                 for op in dupla:
                     fid = str(op["id"])
-                    # contabiliza dia trabalhado real
-                    if stats[fid][turno] == 0:
-                        d_local[fid] += 1
-                    h_local[fid] += HORAS_POR_TURNO
-                    c[fid]       += 1
+                    # contabiliza por turno
                     stats[fid][turno] += 1
                     parceiro_ult[fid] = dupla[1]["id"] if op is dupla[0] else dupla[0]["id"]
                     u_turno[fid]      = turno
@@ -529,6 +526,15 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
                                 bloco.pop(fid, None)
 
             ids_trab = {str(e["id"]) for t in TURNOS for e in linha["turnos"][t]}
+
+            # ---- atualizações únicas por dia ----
+            for fid in ids_trab:
+                h_local[fid] += HORAS_POR_TURNO
+                c[fid] += 1
+                d_local[fid] += 1
+                dias_trab_mes[fid] += 1
+            # --------------------------------------
+
             for f in funcionarios:
                 fid = str(f["id"])
                 if fid in ids_trab:
