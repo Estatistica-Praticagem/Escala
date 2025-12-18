@@ -1,15 +1,12 @@
 # Gerador de escalas EXP/AUX
 # ---------------------------------
-# Versão revisada em 2025-12-10  (patch “start-strategy” 2025-12-15)
-# Hot-fix “START-BLOCO” 2025-12-16 – elimina pipocar na 1ª semana criando blocos mínimos de 3 dias
-# Patch “continuidade” 2025-12-17 – suporte completo à geração contínua
-# Patch “continuidade-seq” 2025-12-17 – respeita sequência e turno do mês anterior
+# Versão revisada em 2025-12-18  (Patches A-H + Ajustes 1-3 + Fix “dupla-repetida” e “dias reais”)
 #
 # Regras duras PRIORITÁRIAS
 #     1. Respeita férias, datas e turnos proibidos
 #     2. Máx. 6 dias consecutivos de trabalho   (3 logo na 1ª semana)
 #     3. Durante sequência (consec > 0) o funcionário deve manter o MESMO turno
-#     4. Após folga (consec == 0) deve seguir o ciclo 00↔12 / 06↔18
+#     4. Após folga (consec == 0) deve seguir o ciclo 00→18→12→06→00
 #     5. Máximo 8 dias por turno/mês (parâmetro)
 #
 # Regras suaves ponderadas por SOFT_WEIGHTS
@@ -34,13 +31,13 @@ HARD_RULES = {
     "data_proibida": True,
     "troca_de_turno_sem_folga": True,
     "mesmo_turno_sem_folga": True,
-    "limite_dias_consecutivos": 6,   # usado depois da 1ª semana
+    "limite_dias_consecutivos": 6,
     "limite_dias_mesmo_turno": 8,
 }
 
 # -------- SOFT CONSTRAINTS --------
 SOFT_WEIGHTS = {
-    # ---------- PENALTIES (↑ score = pior) ----------
+    # ---------- PENALTIES ----------
     "balanceamento_turnos":            120,
     "penaliza_zero_turno":             300,
     "penaliza_intercalado_trab_folga": 500,
@@ -52,22 +49,22 @@ SOFT_WEIGHTS = {
     "dias_trabalhados":                 0,
     "desequilibrio_horas":             400,
 
-    # ---------- BONUSES (↓ score = melhor) ----------
+    # ---------- BONUSES ------------
     "preferencia_turno":              -15,
     "bonus_seq_alvo":                -500,
     "bonus_folga_agrupada":          -400,
     "bonus_sequencia_mesmo_turno":   -500,
 }
 
-TARGET_SEQ_MIN, TARGET_SEQ_MAX = 3, 5
+TARGET_SEQ_MIN, TARGET_SEQ_MAX = 4, 4        # alvo 4 dias de trabalho
 BLOCK_MIN_SIZE                = TARGET_SEQ_MIN
-MIN_SEQ_AFTER_START           = 3
+MIN_SEQ_AFTER_START           = 4
 
 # ========================
 #   TURNOS E CONSTANTES
 # ========================
 TURNOS       = ["00H", "06H", "12H", "18H"]
-CICLO_TURNOS = {"00H": "12H", "12H": "00H", "06H": "18H", "18H": "06H"}
+CICLO_TURNOS = {"00H": "18H", "18H": "12H", "12H": "06H", "06H": "00H"}
 
 parse_mes   = lambda m: f"{int(m):02d}"
 dias_do_mes = lambda y, m: calendar.monthrange(y, m)[1]
@@ -124,7 +121,6 @@ def parse_restricoes(lista):
 #   REGRAS DURAS
 # ========================
 def limite_consecutivo(dia_corrente):
-    """3 dias na primeira semana; depois 6"""
     return MAX_SEQ_START_WINDOW if dia_corrente <= START_WINDOW_DIAS else HARD_RULES["limite_dias_consecutivos"]
 
 
@@ -153,69 +149,81 @@ def restricoes_hard(fid, turno, data, info, consec, ultimo_turno, stats):
         return False
     if stats and stats.get(fid, {}).get(turno, 0) >= HARD_RULES["limite_dias_mesmo_turno"]:
         return False
-    if data.day > START_WINDOW_DIAS and cons == 0 and ut is not None:
-        if stats[fid][ut] < MIN_SEQ_AFTER_START:
-            return False
+
     return True
 
 # ========================
 #   SCORE SOFT
 # ========================
 def score_func(params, func, turno, horas, consec, dia, prefs,
-               ultimo_turno, stats, mes_acum_horas,
+               ultimo_turno, stats, mes_acum_horas, dias_trab_mes,
                seq_trab=None, seq_folga=None, parceiro_ult=None, parceiro_atual=None, estado_continuo=None):
     fid = str(func["id"])
     s = 0
 
+    # penalidade de continuidade na primeira semana
     if estado_continuo and dia <= START_WINDOW_DIAS:
         s += estado_continuo["penalidade_start"].get(fid, 0) * 800
 
-    if turno not in prefs.get(fid, set()):
+    # preferência de turno (bônus)
+    if turno in prefs.get(fid, set()):
         s += SOFT_WEIGHTS["preferencia_turno"]
 
-    media = statistics.mean(stats[fid].values())
-    if stats[fid][turno] > media + 2:
-        s += SOFT_WEIGHTS["balanceamento_turnos"] * (stats[fid][turno] - media)
+    # penalidade por troca precoce de turno
+    ut_prev = ultimo_turno.get(fid)
+    if ut_prev is not None and turno != ut_prev and stats[fid][ut_prev] < 4 and dia > START_WINDOW_DIAS:
+        s += 250
 
-    s += consec[fid] * SOFT_WEIGHTS["dias_trabalhados"]
+    # balanceamento por turno (target dias/4 usando stats)
+    dias_totais_turnos  = sum(stats[fid].values())
+    target_per_turno = (dias_totais_turnos + 1) / 4 if dias_totais_turnos else 0.25
+    futura_contagem = stats[fid][turno] + 1
+    diff_turno      = futura_contagem - target_per_turno
+    s += SOFT_WEIGHTS["balanceamento_turnos"] * (diff_turno ** 2)
 
-    if mes_acum_horas and fid in mes_acum_horas:
-        s += (mes_acum_horas[fid] / 10) * SOFT_WEIGHTS["desequilibrio_horas"]
+    # evitar turno zerado
+    if dia >= 10 and stats[fid][turno] == 0:
+        s -= SOFT_WEIGHTS["penaliza_ausencia_turno"]
 
+    # troca de turno indesejada
     if ultimo_turno.get(fid) and ultimo_turno[fid] != turno:
         s += SOFT_WEIGHTS["troca_de_turno"]
 
-    if stats[fid][turno] > 10:
-        s += 100 * (stats[fid][turno] - 10)
+    # hard-limit nearing warning
+    if stats[fid][turno] >= HARD_RULES["limite_dias_mesmo_turno"]:
+        s += 120 + 40 * (stats[fid][turno] - HARD_RULES["limite_dias_mesmo_turno"])
 
-    if dia > 20 and sum(1 for t in TURNOS if stats[fid][t] > 0) < 3:
-        s += 150
-
+    # sequência de trabalho 4x2
     seq_atual = consec[fid]
     continua  = ultimo_turno.get(fid) == turno
     if continua:
         futura = seq_atual + 1
-        if futura < TARGET_SEQ_MIN:
-            s += SOFT_WEIGHTS["penaliza_seq_curta"]
-        elif TARGET_SEQ_MIN <= futura <= TARGET_SEQ_MAX:
-            s -= SOFT_WEIGHTS["bonus_seq_alvo"]
-        elif futura > TARGET_SEQ_MAX:
+        if futura < 4:
+            s += SOFT_WEIGHTS["bonus_sequencia_mesmo_turno"] * 0.10
+        elif futura == 4:
+            s += SOFT_WEIGHTS["bonus_seq_alvo"]
+        else:
             s += SOFT_WEIGHTS["penaliza_seq_longa"]
 
-    if seq_trab and seq_folga:
+    # sequências de folga
+    if seq_folga and seq_trab:
         if seq_trab[fid] == 1 and seq_folga[fid] == 1:
             s += SOFT_WEIGHTS["penaliza_intercalado_trab_folga"]
-        if seq_folga[fid] > 1:
-            s -= seq_folga[fid] * SOFT_WEIGHTS["bonus_folga_agrupada"]
+        if seq_folga[fid] >= 2:
+            s += seq_folga[fid] * SOFT_WEIGHTS["bonus_folga_agrupada"]
 
-    if stats[fid][turno] == 0 and dia > 7:
-        s += SOFT_WEIGHTS["penaliza_zero_turno"]
-
+    # penaliza parceiro repetido
     if parceiro_ult and parceiro_ult.get(fid) == parceiro_atual:
         s += SOFT_WEIGHTS["penaliza_parceiro_repetido"]
 
-    if stats[fid][turno] >= 8:
-        s += 120 + 40 * (stats[fid][turno] - 7)
+    # desequilíbrio de horas acumuladas
+    if mes_acum_horas and fid in mes_acum_horas:
+        s += (mes_acum_horas[fid] / 10) * SOFT_WEIGHTS["desequilibrio_horas"]
+
+    # balanceamento dias trabalhados (real)
+    futura_dias_trab = dias_trab_mes.get(fid, 0) + 1
+    diff_days = abs(futura_dias_trab - 21)
+    s += diff_days * 45
 
     return s + random.uniform(-1, 1)
 
@@ -225,7 +233,8 @@ def score_func(params, func, turno, horas, consec, dia, prefs,
 def escolher_func(pool, turno, horas, consec, dia, prefs,
                   ultimo_turno, stats, params, data, info,
                   mes_acum_horas, seq_trab, seq_folga,
-                  parceiro_ult, parceiro_candidato, estado_continuo):
+                  parceiro_ult, parceiro_candidato, estado_continuo,
+                  dias_trab_mes):
     cand = [f for f in pool if restricoes_hard(str(f["id"]), turno, data, info,
                                               consec, ultimo_turno, stats)]
     if not cand:
@@ -252,7 +261,11 @@ def escolher_func(pool, turno, horas, consec, dia, prefs,
         key=lambda fx: score_func(
             params, fx, turno, horas, consec, dia, prefs,
             ultimo_turno, stats, mes_acum_horas,
-            seq_trab, seq_folga, parceiro_ult, parceiro_candidato, estado_continuo        )
+            dias_trab_mes=dias_trab_mes,
+            seq_trab=seq_trab, seq_folga=seq_folga,
+            parceiro_ult=parceiro_ult, parceiro_atual=parceiro_candidato,
+            estado_continuo=estado_continuo
+        )
     )
 
 # ========================
@@ -355,6 +368,9 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
                      tentativas=50, perfis=None, mes_acum_horas=None,
                      estado_continuo=None):
 
+    # --- filtra apenas EXP/AUX ---
+    funcionarios = [f for f in funcionarios if f.get("perfil") in ("EXP", "AUX")]
+
     dias_no_mes = dias_do_mes(ano, mes)
     if perfis is None:
         perfis = {"EXP": [], "AUX": []}
@@ -367,9 +383,6 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
     melhor_score, melhor_dias, melhor_outros = float("inf"), None, {}
 
     for tentativa in range(tentativas):
-        # --------------------------------------------
-        # ► Estado inicial trazido da escala anterior
-        # --------------------------------------------
         c = {
             str(f["id"]): estado_continuo["consec"].get(str(f["id"]), 0) if estado_continuo else 0
             for f in funcionarios
@@ -402,13 +415,16 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
 
         duplas5, duplas3 = gerar_duplas_iniciais(funcionarios, perfis)
         USE_START_STRATEGY = (
-            not estado_continuo and  # ► desliga estratégia quando há continuidade
+            not estado_continuo and
             len(perfis["EXP"]) >= 4 and len(perfis["AUX"]) >= 4
         )
 
         for dia in range(1, dias_no_mes + 1):
             data_atual = datetime(ano, mes, dia).date()
             linha = {"data": str_data(ano, mes, dia), "turnos": {}}
+
+            # controle de repetição no dia
+            alocados_hoje = set()
 
             disp = [
                 f for f in funcionarios
@@ -436,6 +452,8 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
             for turno_i, turno in enumerate(TURNOS):
                 dupla = []
                 dupla.extend(obrig_por_turno[turno])
+                for emp in dupla:
+                    alocados_hoje.add(str(emp["id"]))
 
                 while len(dupla) < 2:
                     if dia <= START_WINDOW_DIAS and USE_START_STRATEGY and not dupla:
@@ -447,44 +465,59 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
                         else:
                             op1, op2 = escolher_dupla_fallback(disp, disp, funcionarios)
                     else:
-                        exp_pool = [f for f in disp if f["perfil"] == "EXP"]
-                        aux_pool = [f for f in disp if f["perfil"] == "AUX"]
+                        exp_pool = [f for f in disp if f["perfil"] == "EXP" and str(f["id"]) not in alocados_hoje]
+                        aux_pool = [f for f in disp if f["perfil"] == "AUX" and str(f["id"]) not in alocados_hoje]
                         if FLEXIBILIZAR and (len(exp_pool) < 1 or len(aux_pool) < 1):
-                            op1, op2 = random.sample(disp, 2) if len(disp) >= 2 else random.sample(funcionarios, 2)
+                            # pools globais sem repetir no dia
+                            global_pool = [f for f in funcionarios if str(f["id"]) not in alocados_hoje]
+                            if len(global_pool) >= 2:
+                                op1, op2 = random.sample(global_pool, 2)
+                            else:
+                                print("\033[93m[WARN] Repetindo funcionário no dia (último recurso)\033[0m")
+                                op1, op2 = random.sample(funcionarios, 2)
                         else:
                             op1 = escolher_func(exp_pool, turno, h_local, c, dia, info["preferencias"],
                                                 u_turno, stats, params, data_atual, info,
                                                 mes_acum_horas, seq_trab, seq_folga,
-                                                parceiro_ult, None, estado_continuo)
+                                                parceiro_ult, None, estado_continuo,
+                                                dias_trab_mes=d_local)
                             op2 = escolher_func(aux_pool, turno, h_local, c, dia, info["preferencias"],
                                                 u_turno, stats, params, data_atual, info,
                                                 mes_acum_horas, seq_trab, seq_folga,
-                                                parceiro_ult, op1["id"], estado_continuo)
+                                                parceiro_ult, op1["id"], estado_continuo,
+                                                dias_trab_mes=d_local)
                     candidatos = [op1, op2]
                     for op in candidatos:
                         if op in disp and op not in dupla and len(dupla) < 2:
                             dupla.append(op)
                             disp.remove(op)
+                            alocados_hoje.add(str(op["id"]))
                     if len(dupla) < 2:
                         if disp:
                             op_rand = random.choice(disp)
                             disp.remove(op_rand)
                         else:
-                            remaining = [f for f in funcionarios if f not in dupla]
+                            remaining = [f for f in funcionarios if f not in dupla and str(f["id"]) not in alocados_hoje]
+                            if not remaining:
+                                print("\033[93m[WARN] Repetindo funcionário no dia (último recurso)\033[0m")
+                                remaining = [f for f in funcionarios if f not in dupla]
                             op_rand = random.choice(remaining)
                         if op_rand not in dupla:
                             dupla.append(op_rand)
+                            alocados_hoje.add(str(op_rand["id"]))
 
                 linha["turnos"][turno] = dupla
 
                 for op in dupla:
                     fid = str(op["id"])
+                    # contabiliza dia trabalhado real
+                    if stats[fid][turno] == 0:
+                        d_local[fid] += 1
                     h_local[fid] += HORAS_POR_TURNO
                     c[fid]       += 1
                     stats[fid][turno] += 1
                     parceiro_ult[fid] = dupla[1]["id"] if op is dupla[0] else dupla[0]["id"]
                     u_turno[fid]      = turno
-                    d_local[fid]     += 1
 
                     if dia <= START_WINDOW_DIAS:
                         if fid not in bloco:
@@ -535,12 +568,14 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
 #   FUNÇÃO AUX – dupla fallback
 # ========================
 def escolher_dupla_fallback(disp, aux_pool, funcionarios):
-    if not disp:
-        disp[:] = aux_pool or funcionarios
-    op1 = random.choice(disp)
-    op2 = random.choice(aux_pool)
-    while op2["id"] == op1["id"]:
-        op2 = random.choice(aux_pool)
+    principal_pool = disp if disp else (aux_pool if aux_pool else funcionarios)
+    op1 = random.choice(principal_pool)
+
+    pool2 = [f for f in (aux_pool if aux_pool else principal_pool) if f["id"] != op1["id"]]
+    if not pool2:
+        pool2 = [f for f in funcionarios if f["id"] != op1["id"]]
+
+    op2 = random.choice(pool2)
     return op1, op2
 
 # ========================
@@ -617,19 +652,10 @@ def main(request):
 # ==========================
 def preparar_estado_continuo(escala_mes_anterior, funcionarios):
     """
-    Lê a escala do mês anterior (inteira) e reconstrói o estado inicial
-    para a geração contínua.
-
-    Retorna:
-        estado = {
-            "consec": {fid: int},
-            "ultimo_turno": {fid: str|None},
-            "dias_trabalhados": {fid: int},
-            "pipocacoes": {fid: int},
-            "penalidade_start": {fid: float}
-        }
+    Suporta formatos:
+        A) {"funcionario_id": ...}
+        B) nome (str)
     """
-
     if not escala_mes_anterior or "dias" not in escala_mes_anterior:
         return None
 
@@ -643,12 +669,19 @@ def preparar_estado_continuo(escala_mes_anterior, funcionarios):
     dias = sorted(escala_mes_anterior["dias"], key=lambda d: d["data"])
     trabalhou_ontem = {fid: False for fid in fids_validos}
 
+    nome_para_id = {f["nome"]: str(f["id"]) for f in funcionarios}
+
     for dia in dias:
         trabalhou_hoje = {fid: False for fid in fids_validos}
 
         for turno, pessoas in dia["turnos"].items():
             for p in pessoas:
-                fid = str(p["funcionario_id"])
+                if isinstance(p, dict) and "funcionario_id" in p:
+                    fid = str(p["funcionario_id"])
+                elif isinstance(p, str):
+                    fid = nome_para_id.get(p)
+                else:
+                    fid = None
                 if fid not in fids_validos:
                     continue
 
