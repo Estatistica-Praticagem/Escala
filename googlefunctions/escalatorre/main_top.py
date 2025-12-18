@@ -1,14 +1,9 @@
-# Gerador de escalas EXP/AUX – versão elástica 2025-12-18
+# Gerador de escalas EXP/AUX – versão refatorada em 2025-12-18
 # ------------------------------------------------------------
 # Mantém 100 % de compatibilidade de I/O: main(request),
 # gerar_parecer_escala, gerar_escala_mes e gerar_escala_ano continuam
 # iguais por fora. Toda a inteligência de construção diária foi
 # isolada no bloco MOTOR_DE_ESCALA, facilitando futuras evoluções.
-#
-# ALTERAÇÕES 2025‑12‑18:
-#   • Elasticidade de blocos 4→5→6 dias conforme pressão de demanda.
-#   • Comentários marcados com  ##### ELASTIC #####  explicam decisões.
-#   • Nenhuma assinatura, JSON ou nome de turno foi alterado.
 
 import json
 import calendar
@@ -96,16 +91,10 @@ Saídas:
         "score":     float
     }
 
-Novidade 2025‑12‑18 – ELASTICIDADE:
-    • Quando há escassez, blocos de 4 dias podem ser estendidos explicitamente
-      para 5 ou 6 dias, sem folga nem avanço de turno.
-    • A escolha de alongar o bloco é baseada na pressão diária:
-        pressão = demanda_total_do_dia / operadores_disponiveis_hoje
-        0   − 0.65  → bloco máximo 4
-        0.65− 0.75 → bloco máximo 5
-        >0.75      → bloco máximo 6
-    • Extensão é decidida ao término do 4º (ou 5º) dia, respeitando o
-      limite máximo vigente e nunca ultrapassando 6 dias.
+O QUE NÃO ALTERAR FORA DO BLOCO:
+    • Funções públicas (main, gerar_escala_mes, gerar_escala_ano, gerar_parecer_escala)
+    • Formatos de JSON de entrada/saída
+    • Nome dos turnos
 """
 
 # --- CONSTANTES / CONFIG DO MOTOR ---------------------------------
@@ -157,8 +146,6 @@ def limite_consecutivo(dia_corrente):
 
 
 # ---------- HARD CONSTRAINTS ----------
-# (inalterado)
-
 def restricoes_hard(fid, turno, data, info, consec, ultimo_turno, stats):
     if any(s <= data <= e for s, e in info["ferias"].get(fid, [])):
         return False
@@ -188,8 +175,6 @@ def restricoes_hard(fid, turno, data, info, consec, ultimo_turno, stats):
 
 
 # ---------- SOFT SCORE ----------
-# (inalterado)
-
 def score_func(params, func, turno, horas, consec, dia, prefs,
                ultimo_turno, stats, mes_acum_horas, dias_trab_mes,
                seq_trab=None, seq_folga=None, parceiro_ult=None, parceiro_atual=None,
@@ -260,14 +245,13 @@ def score_func(params, func, turno, horas, consec, dia, prefs,
 
 
 # ---------- ESCOLHA DO FUNCIONÁRIO (ajuste de fallback seguro) ----------
-# (inalterado)
-
 def escolher_func(pool, turno, horas, consec, dia, prefs,
                   ultimo_turno, stats, params, data, info,
                   mes_acum_horas, seq_trab, seq_folga,
                   parceiro_ult, parceiro_candidato, estado_continuo,
                   dias_trab_mes, dias_semana, week_id, meta_semana,
                   folga_rest):
+
     cand = [
         f for f in pool
         if folga_rest.get(str(f["id"]), 0) == 0 and
@@ -311,8 +295,6 @@ def escolher_func(pool, turno, horas, consec, dia, prefs,
     )
 
 # ---------- SUPORTE – duplas iniciais ----------
-# (inalterado)
-
 def gerar_duplas_iniciais(funcionarios, perfis):
     exp, aux = perfis["EXP"][:], perfis["AUX"][:]
     random.shuffle(exp)
@@ -333,8 +315,6 @@ def gerar_duplas_iniciais(funcionarios, perfis):
 
 
 # ---------- SUPORTE – dupla fallback (pequeno ajuste para segurança) ----------
-# (inalterado)
-
 def escolher_dupla_fallback(disp, aux_pool, funcionarios, folga_rest):
     principal_pool = [f for f in (disp if disp else (aux_pool if aux_pool else funcionarios))
                       if folga_rest.get(str(f["id"]), 0) == 0]
@@ -349,8 +329,6 @@ def escolher_dupla_fallback(disp, aux_pool, funcionarios, folga_rest):
 
 
 # ---------- MOTOR PRINCIPAL (AJUSTADO PARA 4x1 / 4x2 / 4x3 + blocos fixos 4 dias) ----------
-#   + ELASTICIDADE DE BLOCO 5/6 DIAS (2025‑12‑18)
-
 def motor_gerar_dias_mes(ano, mes, funcionarios, params, info,
                          estado_acumulado=None, estado_continuo=None,
                          FLEXIBILIZAR=True, tentativas=50, perfis=None,
@@ -358,16 +336,21 @@ def motor_gerar_dias_mes(ano, mes, funcionarios, params, info,
     """
     Motor gerador puro: devolve grade crua + métricas.
 
-    PRINCÍPIO BASE (4x1 / 4x2 / 4x3):
+    PRINCÍPIO NOVO (esqueletos 4x1 / 4x2 / 4x3):
       - Todo bloco de TRABALHO é FIXO: 4 dias no mesmo turno.
       - Ao terminar o bloco, entra em FOLGA (2 ou 3 dias) definida no INÍCIO do ciclo.
       - Ao terminar folga, avança turno no CICLO: 00 -> 18 -> 12 -> 06 -> 00.
       - O MODELO (4x1/4x2/4x3) é escolhido POR SEMANA, baseado em ATIVOS reais.
+      - Se mudar disponibilidade na semana: só afeta QUEM VAI INICIAR NOVO CICLO.
+        Quem já está em ciclo (work_left>0 ou off_left>0) continua até terminar.
 
-    ELASTICIDADE 2025‑12‑18:
-      - Se houver escassez, o bloco pode ser estendido explicitamente para 5 ou 6 dias.
-      - A decisão é diária, conforme pressão calculada antes da alocação.
-      - Nenhum operador excede 6 dias consecutivos.
+    4x1: demanda menor no 00H (1 vaga); demais turnos 2 vagas; folga=2
+    4x2: demanda cheia 2 vagas/turno; folga=2
+    4x3: demanda cheia 2 vagas/turno; folga=3
+
+    Observação:
+      - Mantém as estruturas de retorno esperadas por gerar_escala_mes/ano.
+      - Não depende de score complexo; só usa heurística leve para balancear.
     """
     # -------------------------
     # Helpers locais (auto-contido)
@@ -425,12 +408,11 @@ def motor_gerar_dias_mes(ano, mes, funcionarios, params, info,
         prefer = [f for f in cands if f.get("perfil") == perfil]
         return _pick_melhor(prefer or cands, d_local, h_local)
 
-    def _iniciar_bloco(fid, turno, work_left, off_len_atual, turno_atual, folga_prox, block_len):
+    def _iniciar_bloco(fid, turno, work_left, off_len_atual, turno_atual, folga_prox):
         """Início de ciclo travado: trabalho 4 dias fixos + folga (2/3) definida agora."""
         turno_atual[fid] = turno
         work_left[fid] = 4
         off_len_atual[fid] = int(folga_prox)
-        block_len[fid] = 0      ##### ELASTIC #####  zeramos comprimento do novo bloco
 
     # -------------------------
     # Setup base
@@ -467,32 +449,30 @@ def motor_gerar_dias_mes(ano, mes, funcionarios, params, info,
         u_turno = {str(f["id"]): estado_continuo["ultimo_turno"].get(str(f["id"])) if estado_continuo else None for f in funcionarios}
 
         # -------------------------
-        # NOVO: estado do ciclo (4 trabalho + 2/3 folga) + comprimento do bloco
+        # NOVO: estado do ciclo (4 trabalho + 2/3 folga)
         # -------------------------
-        turno_atual = {str(f["id"]): None for f in funcionarios}   # turno do ciclo
-        work_left   = {str(f["id"]): 0    for f in funcionarios}   # dias restantes do bloco
+        turno_atual = {str(f["id"]): None for f in funcionarios}   # turno do ciclo (onde ele trabalha nos blocos)
+        work_left   = {str(f["id"]): 0    for f in funcionarios}   # dias restantes do bloco de trabalho
         off_left    = {str(f["id"]): 0    for f in funcionarios}   # dias restantes de folga
-        off_len_atual = {str(f["id"]): None for f in funcionarios} # folga configurada no início
-        block_len   = {str(f["id"]): 0    for f in funcionarios}   # ##### ELASTIC ##### tamanho atual do bloco
+        off_len_atual = {str(f["id"]): None for f in funcionarios} # folga do ciclo atual (fixada no início)
 
         # Controle de entrada em férias para não “avançar turno” todo dia
         em_ferias_ontem = {str(f["id"]): False for f in funcionarios}
 
-        # Continuidade do mês anterior
+        # Continuidade do mês anterior: preserva turno e completa o bloco de 4
         if estado_continuo:
             for fid, cons in estado_continuo["consec"].items():
                 if cons and estado_continuo["ultimo_turno"].get(fid):
                     turno_atual[fid] = estado_continuo["ultimo_turno"][fid]
-                    block_len[fid] = cons  ##### ELASTIC #####  leva adiante comprimento já trabalhado
+                    # completa bloco 4 se ainda estava dentro
                     if cons < 4:
                         work_left[fid] = 4 - cons
                         off_left[fid] = 0
                     else:
+                        # se já passou de 4, começamos mês em folga padrão 2
                         work_left[fid] = 0
                         off_left[fid] = 2
                         off_len_atual[fid] = 2
-                else:
-                    block_len[fid] = 0
 
         dias_mes = []
 
@@ -504,7 +484,7 @@ def motor_gerar_dias_mes(ano, mes, funcionarios, params, info,
             week_year, week_num, _ = data_atual.isocalendar()
             week_id = f"{week_year}-{week_num:02d}"
 
-            # Escolhe modelo por semana
+            # Escolhe modelo por semana com base em ativos (férias cobrindo a semana inteira)
             if week_id not in week_cfg_cache:
                 monday = datetime.fromisocalendar(week_year, week_num, 1).date()
                 sunday = monday + timedelta(days=6)
@@ -522,22 +502,11 @@ def motor_gerar_dias_mes(ano, mes, funcionarios, params, info,
             demanda = cfg_semana["demanda"]
             folga_prox = cfg_semana["folga"]
 
-            # ---------- ELASTIC ----------
-            # Calcula pressão de demanda ANTES das alocações
-            em_ferias_hoje = {str(f["id"]): _em_ferias(str(f["id"]), data_atual) for f in funcionarios}
-            operadores_disponiveis = sum(1 for fid in em_ferias_hoje if not em_ferias_hoje[fid])
-            demanda_total_dia = sum(demanda.values())
-            pressao = demanda_total_dia / operadores_disponiveis if operadores_disponiveis else 1
-            if pressao <= 0.65:
-                max_bloco_dia = 4
-            elif pressao <= 0.75:
-                max_bloco_dia = 5
-            else:
-                max_bloco_dia = 6
-            ##### ELASTIC #####  max_bloco_dia definido conforme pressão ({pressao:.2f})
-
             linha = {"data": str_data(ano, mes, dia), "turnos": {}}
             alocados_hoje = set()
+
+            # marca férias hoje
+            em_ferias_hoje = {str(f["id"]): _em_ferias(str(f["id"]), data_atual) for f in funcionarios}
 
             # Disponíveis hoje: não está de folga e não está de férias hoje
             disp = [
@@ -548,41 +517,59 @@ def motor_gerar_dias_mes(ano, mes, funcionarios, params, info,
             random.shuffle(disp)
 
             # -------------------------
-            # Preenche turno a turno
+            # Preenche turno a turno com demanda variável (4x1)
             # -------------------------
             for turno in TURNOS:
                 vagas = int(demanda.get(turno, 2))
                 aloc = []
 
                 def candidatos_base():
+                    """Base: disponíveis hoje e ainda não alocados no dia."""
                     return [f for f in disp if str(f["id"]) not in alocados_hoje]
 
                 def cand_em_ciclo(turno_):
                     return [
                         f for f in candidatos_base()
-                        if turno_atual.get(str(f["id"])) == turno_ and work_left.get(str(f["id"]), 0) > 0
+                        if turno_atual.get(str(f["id"])) == turno_
+                        and work_left.get(str(f["id"]), 0) > 0
                     ]
 
                 def cand_para_iniciar(turno_):
                     return [
                         f for f in candidatos_base()
-                        if turno_atual.get(str(f["id"])) == turno_ and work_left.get(str(f["id"]), 0) == 0 and off_left.get(str(f["id"]), 0) == 0
+                        if turno_atual.get(str(f["id"])) == turno_
+                        and work_left.get(str(f["id"]), 0) == 0
+                        and off_left.get(str(f["id"]), 0) == 0
                     ]
 
                 def cand_sem_turno():
                     return [
                         f for f in candidatos_base()
-                        if turno_atual.get(str(f["id"])) is None and work_left.get(str(f["id"]), 0) == 0 and off_left.get(str(f["id"]), 0) == 0
+                        if turno_atual.get(str(f["id"])) is None
+                        and work_left.get(str(f["id"]), 0) == 0
+                        and off_left.get(str(f["id"]), 0) == 0
                     ]
 
                 while len(aloc) < vagas:
-                    base = cand_em_ciclo(turno) or cand_para_iniciar(turno) or cand_sem_turno()
+                    # prioridade: continuar bloco já em andamento no turno
+                    base = cand_em_ciclo(turno)
 
+                    # se não houver, tenta iniciar novo bloco no turno "correto" do usuário
+                    if not base:
+                        base = cand_para_iniciar(turno)
+
+                    # se ainda não houver, tenta encaixar quem ainda não tem turno (primeiro encaixe do mês)
+                    if not base:
+                        base = cand_sem_turno()
+
+                    # último recurso (FLEX): qualquer disponível hoje (pode quebrar alinhamento do turno_atual)
                     if not base and FLEXIBILIZAR:
                         base = candidatos_base()
+
                     if not base:
                         break
 
+                    # Regra de perfil (quando vagas == 2): tenta EXP + AUX
                     if vagas == 2:
                         if len(aloc) == 0:
                             escolhido = _pick_por_perfil(base, "EXP", d_local, h_local) or _pick_melhor(base, d_local, h_local)
@@ -591,35 +578,40 @@ def motor_gerar_dias_mes(ano, mes, funcionarios, params, info,
                             alvo = "AUX" if primeiro == "EXP" else "EXP"
                             escolhido = _pick_por_perfil(base, alvo, d_local, h_local) or _pick_melhor(base, d_local, h_local)
                     else:
+                        # vaga única (4x1 madrugada): prefere EXP
                         escolhido = _pick_por_perfil(base, "EXP", d_local, h_local) or _pick_melhor(base, d_local, h_local)
 
                     if not escolhido:
                         break
 
                     fid = str(escolhido["id"])
+
+                    # se não tinha turno definido ainda, fixa agora no turno que ele está sendo alocado
                     if turno_atual[fid] is None:
                         turno_atual[fid] = turno
 
+                    # se está livre (não em bloco e não em folga), iniciar bloco com folga da semana ATUAL
                     if work_left[fid] == 0 and off_left[fid] == 0:
-                        _iniciar_bloco(fid, turno_atual[fid], work_left, off_len_atual, turno_atual, folga_prox, block_len)
+                        _iniciar_bloco(fid, turno_atual[fid], work_left, off_len_atual, turno_atual, folga_prox)
 
                     aloc.append(escolhido)
                     alocados_hoje.add(fid)
 
                 linha["turnos"][turno] = aloc
 
-                # stats + ultimo turno do dia + comprimento de bloco
+                # stats + ultimo turno do dia
                 for op in aloc:
                     fid = str(op["id"])
                     stats[fid][turno] += 1
-                    u_turno[fid] = turno
-                    block_len[fid] += 1   ##### ELASTIC #####  conta dia no bloco atual
+                    u_turno[fid] = turno  # usado pelo parecer/continuidade
+                    # c (consec) será atualizado abaixo
 
             # -------------------------
             # Consolida quem trabalhou hoje
             # -------------------------
             ids_trab = {str(e["id"]) for t in TURNOS for e in linha["turnos"].get(t, [])}
 
+            # Horas/dias acumulados
             for fid in ids_trab:
                 h_local[fid] += HORAS_POR_TURNO
                 d_local[fid] += 1
@@ -627,24 +619,22 @@ def motor_gerar_dias_mes(ano, mes, funcionarios, params, info,
                 dias_semana[fid][week_id] = dias_semana[fid].get(week_id, 0) + 1
 
             # -------------------------
-            # UPDATE DO CICLO + ELASTICIDADE
+            # UPDATE do ciclo 4 dias + folga 2/3
             # -------------------------
+            # 1) Quem trabalhou hoje consome 1 dia do bloco (work_left)
             for fid in ids_trab:
                 if work_left[fid] <= 0:
+                    # fallback: se entrou sem iniciar bloco (não deveria), corrige
                     _iniciar_bloco(fid, turno_atual.get(fid) or u_turno.get(fid) or "00H",
-                                   work_left, off_len_atual, turno_atual, folga_prox, block_len)
+                                   work_left, off_len_atual, turno_atual, folga_prox)
 
                 work_left[fid] = max(0, work_left[fid] - 1)
 
-                # Quando bloco chega a 0, avalia extensão
+                # terminou bloco -> entra em folga (fixada no início do bloco)
                 if work_left[fid] == 0:
-                    if block_len[fid] >= 4 and block_len[fid] < max_bloco_dia:
-                        # ##### ELASTIC #####  estendendo bloco por escassez
-                        work_left[fid] = 1   # adiciona mais 1 dia de trabalho
-                        # Comentário: bloco estendido (len={} → limite {})
-                    else:
-                        off_left[fid] = int(off_len_atual[fid] or folga_prox)
-                        block_len[fid] = 0  # reset comprimento após folga
+                    off_left[fid] = int(off_len_atual[fid] or folga_prox)
+
+                # atualiza c (consec antigo) para compatibilidade com estado_continuo
                 c[fid] = c.get(fid, 0) + 1
 
             # 2) Quem não trabalhou hoje:
@@ -653,49 +643,57 @@ def motor_gerar_dias_mes(ano, mes, funcionarios, params, info,
                 if fid in ids_trab:
                     continue
 
+                # Se entrou em férias HOJE (transição), quebra ciclo e avança turno uma vez (preserva rotação)
                 if em_ferias_hoje[fid] and not em_ferias_ontem.get(fid, False):
                     if turno_atual.get(fid):
                         turno_atual[fid] = CICLO_TURNOS[turno_atual[fid]]
-                    work_left[fid] = off_left[fid] = 0
+                    work_left[fid] = 0
+                    off_left[fid] = 0
                     off_len_atual[fid] = None
-                    block_len[fid] = 0
                     c[fid] = 0
                     continue
 
+                # Se continua de férias, congela (não avança nem consome)
                 if em_ferias_hoje[fid]:
                     c[fid] = 0
                     continue
 
+                # Se estava em folga, consome 1 dia
                 if off_left[fid] > 0:
                     off_left[fid] = max(0, off_left[fid] - 1)
                     c[fid] = 0
+                    # terminou folga -> avança turno pro próximo (CICLO)
                     if off_left[fid] == 0 and turno_atual.get(fid):
                         turno_atual[fid] = CICLO_TURNOS[turno_atual[fid]]
-                        off_len_atual[fid] = None
-                        block_len[fid] = 0
+                        off_len_atual[fid] = None  # próxima folga será aplicada no início do próximo ciclo
                     continue
 
+                # Se NÃO estava em folga mas estava em bloco e ficou sem escalar (por falta de vaga/restrições),
+                # quebra o bloco e força folga mínima (não emenda automaticamente)
                 if work_left[fid] > 0:
                     work_left[fid] = 0
                     off_left[fid] = int(off_len_atual[fid] or 2)
                     off_len_atual[fid] = off_left[fid]
-                    block_len[fid] = 0
                     c[fid] = 0
                     continue
 
-                block_len[fid] = 0
+                # totalmente livre e não trabalhou hoje
                 c[fid] = 0
 
+            # atualiza mapa "ontem"
             em_ferias_ontem = em_ferias_hoje
+
             dias_mes.append(linha)
 
         # -------------------------
-        # Score simples (equilíbrio de horas)
+        # Score simples (equilíbrio de horas) + guarda melhor tentativa
         # -------------------------
         valores = list(h_local.values())
         if not valores:
             continue
+
         score = (max(valores) - min(valores)) + statistics.mean(valores) / 5
+
         if score < melhor_score:
             melhor_score = score
             melhor_dias = dias_mes
@@ -706,6 +704,7 @@ def motor_gerar_dias_mes(ano, mes, funcionarios, params, info,
         **melhor_outros,
         "score": melhor_score,
     }
+
 
 # ========================
 # RELATÓRIO / PARECER (MANTER COMO HOJE)

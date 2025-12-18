@@ -328,240 +328,381 @@ def escolher_dupla_fallback(disp, aux_pool, funcionarios, folga_rest):
     return op1, op2
 
 
-# ---------- MOTOR PRINCIPAL ----------
+# ---------- MOTOR PRINCIPAL (AJUSTADO PARA 4x1 / 4x2 / 4x3 + blocos fixos 4 dias) ----------
 def motor_gerar_dias_mes(ano, mes, funcionarios, params, info,
                          estado_acumulado=None, estado_continuo=None,
                          FLEXIBILIZAR=True, tentativas=50, perfis=None,
                          mes_acum_horas=None):
-    """Bloco gerador puro: devolve grade crua + métricas."""
+    """
+    Motor gerador puro: devolve grade crua + métricas.
+
+    PRINCÍPIO NOVO (esqueletos 4x1 / 4x2 / 4x3):
+      - Todo bloco de TRABALHO é FIXO: 4 dias no mesmo turno.
+      - Ao terminar o bloco, entra em FOLGA (2 ou 3 dias) definida no INÍCIO do ciclo.
+      - Ao terminar folga, avança turno no CICLO: 00 -> 18 -> 12 -> 06 -> 00.
+      - O MODELO (4x1/4x2/4x3) é escolhido POR SEMANA, baseado em ATIVOS reais.
+      - Se mudar disponibilidade na semana: só afeta QUEM VAI INICIAR NOVO CICLO.
+        Quem já está em ciclo (work_left>0 ou off_left>0) continua até terminar.
+
+    4x1: demanda menor no 00H (1 vaga); demais turnos 2 vagas; folga=2
+    4x2: demanda cheia 2 vagas/turno; folga=2
+    4x3: demanda cheia 2 vagas/turno; folga=3
+
+    Observação:
+      - Mantém as estruturas de retorno esperadas por gerar_escala_mes/ano.
+      - Não depende de score complexo; só usa heurística leve para balancear.
+    """
+    # -------------------------
+    # Helpers locais (auto-contido)
+    # -------------------------
+    MODELOS = {
+        "4x1": {"folga": 2, "demanda": {"00H": 1, "06H": 2, "12H": 2, "18H": 2}},
+        "4x2": {"folga": 2, "demanda": {"00H": 2, "06H": 2, "12H": 2, "18H": 2}},
+        "4x3": {"folga": 3, "demanda": {"00H": 2, "06H": 2, "12H": 2, "18H": 2}},
+    }
+
+    def _em_ferias(fid, data_):
+        return any(ini <= data_ <= fim for ini, fim in info["ferias"].get(fid, []))
+
+    def contar_ativos_semana(funcs, ferias_map, monday, sunday):
+        """Ativos = não ausente a semana inteira (férias cobrindo de segunda a domingo)."""
+        ativos = 0
+        for f in funcs:
+            fid = str(f["id"])
+            ausente_semana = False
+            for ini, fim in ferias_map.get(fid, []):
+                if ini <= monday and fim >= sunday:
+                    ausente_semana = True
+                    break
+            if not ausente_semana:
+                ativos += 1
+        return max(0, ativos)
+
+    def escolher_modelo_semana(ativos):
+        """
+        Heurística simples (ajuste depois se quiser):
+          - >= 14 ativos => 4x3 (folga 3)
+          - >= 12 ativos => 4x2 (folga 2)
+          - <  12 ativos => 4x1 (reduz madrugada) (folga 2)
+        """
+        if ativos >= 14:
+            return "4x3"
+        if ativos >= 12:
+            return "4x2"
+        return "4x1"
+
+    def _pick_melhor(candidatos, d_local, h_local):
+        """Escolha leve: menos dias no mês, depois menos horas, depois ruído."""
+        if not candidatos:
+            return None
+        return min(
+            candidatos,
+            key=lambda f: (
+                d_local.get(str(f["id"]), 0),
+                h_local.get(str(f["id"]), 0),
+                random.random(),
+            ),
+        )
+
+    def _pick_por_perfil(cands, perfil, d_local, h_local):
+        prefer = [f for f in cands if f.get("perfil") == perfil]
+        return _pick_melhor(prefer or cands, d_local, h_local)
+
+    def _iniciar_bloco(fid, turno, work_left, off_len_atual, turno_atual, folga_prox):
+        """Início de ciclo travado: trabalho 4 dias fixos + folga (2/3) definida agora."""
+        turno_atual[fid] = turno
+        work_left[fid] = 4
+        off_len_atual[fid] = int(folga_prox)
+
+    # -------------------------
+    # Setup base
+    # -------------------------
     funcionarios = [f for f in funcionarios if f.get("perfil") in ("EXP", "AUX")]
-    dias_no_mes  = dias_do_mes(ano, mes)
+    dias_no_mes = dias_do_mes(ano, mes)
 
     if perfis is None:
         perfis = {"EXP": [], "AUX": []}
         for f in funcionarios:
             perfis[f["perfil"]].append(f)
 
-    horas     = dict(estado_acumulado["horas"])     if estado_acumulado else {str(f["id"]): 0 for f in funcionarios}
+    horas = dict(estado_acumulado["horas"]) if estado_acumulado else {str(f["id"]): 0 for f in funcionarios}
     dias_trab = dict(estado_acumulado["dias_trab"]) if estado_acumulado else {str(f["id"]): 0 for f in funcionarios}
 
     melhor_score, melhor_dias, melhor_outros = float("inf"), None, {}
 
-    # ---------- inicial fixo para semana/padrão ----------
-    week_alvos_cache = {}  # week_id -> dias_trab_alvo
+    # cache semanal: week_id -> {"modelo","folga","demanda","ativos"}
+    week_cfg_cache = {}
 
     for _ in range(tentativas):
+        # -------------------------
+        # Estados (por tentativa)
+        # -------------------------
+        h_local = dict(horas)
+        d_local = dict(dias_trab)
 
-        # --- estado de sequência hard do código antigo ---
-        c = {str(f["id"]): estado_continuo["consec"].get(str(f["id"]), 0) if estado_continuo else 0
-             for f in funcionarios}
-        u_turno = {str(f["id"]): estado_continuo["ultimo_turno"].get(str(f["id"])) if estado_continuo else None
-                   for f in funcionarios}
-
-        # ---------- estado de novo ciclo 4/5 x 3/2 ----------
-        trab_rest        = {str(f["id"]): 0 for f in funcionarios}
-        folga_rest       = {str(f["id"]): 0 for f in funcionarios}
-        alvo_trab_atual  = {str(f["id"]): None for f in funcionarios}
-        alvo_folga_atual = {str(f["id"]): None for f in funcionarios}
-
-        if estado_continuo:
-            for fid, cons in estado_continuo["consec"].items():
-                if cons > 0:
-                    alvo = 5 if cons >= 5 else 4
-                    alvo_trab_atual[fid] = alvo
-                    alvo_folga_atual[fid] = 7 - alvo
-                    trab_rest[fid] = max(0, alvo - cons)
-
-        stats        = {str(f["id"]): {t: 0 for t in TURNOS} for f in funcionarios}
-        h_local      = dict(horas)
-        d_local      = dict(dias_trab)
+        stats = {str(f["id"]): {t: 0 for t in TURNOS} for f in funcionarios}
         dias_trab_mes = {str(f["id"]): 0 for f in funcionarios}
-        seq_trab     = {str(f["id"]): 0 for f in funcionarios}
-        seq_folga    = {str(f["id"]): 0 for f in funcionarios}
-        parceiro_ult = {str(f["id"]): None for f in funcionarios}
-        dias_semana  = {str(f["id"]): {} for f in funcionarios}
+        dias_semana = {str(f["id"]): {} for f in funcionarios}
 
-        bloco_inicial = {}
+        # Mantemos esses estados antigos só para compatibilidade interna (não é o motor principal)
+        c = {str(f["id"]): estado_continuo["consec"].get(str(f["id"]), 0) if estado_continuo else 0 for f in funcionarios}
+        u_turno = {str(f["id"]): estado_continuo["ultimo_turno"].get(str(f["id"])) if estado_continuo else None for f in funcionarios}
+
+        # -------------------------
+        # NOVO: estado do ciclo (4 trabalho + 2/3 folga)
+        # -------------------------
+        turno_atual = {str(f["id"]): None for f in funcionarios}   # turno do ciclo (onde ele trabalha nos blocos)
+        work_left   = {str(f["id"]): 0    for f in funcionarios}   # dias restantes do bloco de trabalho
+        off_left    = {str(f["id"]): 0    for f in funcionarios}   # dias restantes de folga
+        off_len_atual = {str(f["id"]): None for f in funcionarios} # folga do ciclo atual (fixada no início)
+
+        # Controle de entrada em férias para não “avançar turno” todo dia
+        em_ferias_ontem = {str(f["id"]): False for f in funcionarios}
+
+        # Continuidade do mês anterior: preserva turno e completa o bloco de 4
         if estado_continuo:
             for fid, cons in estado_continuo["consec"].items():
-                if cons > 0 and estado_continuo["ultimo_turno"].get(fid):
-                    rem = max(0, BLOCK_MIN_SIZE - cons)
-                    bloco_inicial[fid] = {"turno": estado_continuo["ultimo_turno"][fid], "remaining": rem}
+                if cons and estado_continuo["ultimo_turno"].get(fid):
+                    turno_atual[fid] = estado_continuo["ultimo_turno"][fid]
+                    # completa bloco 4 se ainda estava dentro
+                    if cons < 4:
+                        work_left[fid] = 4 - cons
+                        off_left[fid] = 0
+                    else:
+                        # se já passou de 4, começamos mês em folga padrão 2
+                        work_left[fid] = 0
+                        off_left[fid] = 2
+                        off_len_atual[fid] = 2
 
         dias_mes = []
-        duplas5, duplas3 = gerar_duplas_iniciais(funcionarios, perfis)
-        use_start_strategy = (
-            not estado_continuo and
-            len(perfis["EXP"]) >= 4 and len(perfis["AUX"]) >= 4
-        )
 
+        # -------------------------
+        # Loop diário
+        # -------------------------
         for dia in range(1, dias_no_mes + 1):
             data_atual = datetime(ano, mes, dia).date()
             week_year, week_num, _ = data_atual.isocalendar()
             week_id = f"{week_year}-{week_num:02d}"
 
-            # ---------- calcula alvo semanal se ainda não houver ----------
-            if week_id not in week_alvos_cache:
+            # Escolhe modelo por semana com base em ativos (férias cobrindo a semana inteira)
+            if week_id not in week_cfg_cache:
                 monday = datetime.fromisocalendar(week_year, week_num, 1).date()
                 sunday = monday + timedelta(days=6)
+                ativos = contar_ativos_semana(funcionarios, info["ferias"], monday, sunday)
+                modelo = escolher_modelo_semana(ativos)
+                cfg = MODELOS[modelo]
+                week_cfg_cache[week_id] = {
+                    "modelo": modelo,
+                    "folga": cfg["folga"],
+                    "demanda": cfg["demanda"],
+                    "ativos": ativos,
+                }
 
-                ativos = 0
-                for f in funcionarios:
-                    fid = str(f["id"])
-                    ausente_semana = False
-                    for ini, fim in info["ferias"].get(fid, []):
-                        if ini <= monday and fim >= sunday:
-                            ausente_semana = True
-                            break
-                    if not ausente_semana:
-                        ativos += 1
-                ativos = max(1, ativos)
-                meta_semana = math.ceil(56 / ativos)
-                dias_trab_alvo = clamp(meta_semana, 4, 5)
-                week_alvos_cache[week_id] = dias_trab_alvo
-            else:
-                dias_trab_alvo = week_alvos_cache[week_id]
+            cfg_semana = week_cfg_cache[week_id]
+            demanda = cfg_semana["demanda"]
+            folga_prox = cfg_semana["folga"]
 
             linha = {"data": str_data(ano, mes, dia), "turnos": {}}
             alocados_hoje = set()
 
+            # marca férias hoje
+            em_ferias_hoje = {str(f["id"]): _em_ferias(str(f["id"]), data_atual) for f in funcionarios}
+
+            # Disponíveis hoje: não está de folga e não está de férias hoje
             disp = [
                 f for f in funcionarios
-                if folga_rest[str(f["id"])] == 0 and
-                   not any(s <= data_atual <= e for s, e in info["ferias"].get(str(f["id"]), []))
+                if off_left[str(f["id"])] == 0
+                and not em_ferias_hoje[str(f["id"])]
             ]
             random.shuffle(disp)
 
-            obrig_por_turno = {t: [] for t in TURNOS}
-            if dia <= START_WINDOW_DIAS:
-                for fid, binfo in list(bloco_inicial.items()):
-                    if binfo["remaining"] <= 0 or c[fid] >= HARD_RULES["limite_dias_consecutivos"]:
-                        bloco_inicial.pop(fid); continue
-                    emp = next((e for e in disp if str(e["id"]) == fid), None)
-                    if not emp:
-                        bloco_inicial.pop(fid); continue
-                    if len(obrig_por_turno[binfo["turno"]]) < 2:
-                        obrig_por_turno[binfo["turno"]].append(emp)
-                        disp.remove(emp)
+            # -------------------------
+            # Preenche turno a turno com demanda variável (4x1)
+            # -------------------------
+            for turno in TURNOS:
+                vagas = int(demanda.get(turno, 2))
+                aloc = []
 
-            for turno_i, turno in enumerate(TURNOS):
-                dupla = []
-                dupla.extend(obrig_por_turno[turno])
-                for emp in dupla:
-                    alocados_hoje.add(str(emp["id"]))
+                def candidatos_base():
+                    """Base: disponíveis hoje e ainda não alocados no dia."""
+                    return [f for f in disp if str(f["id"]) not in alocados_hoje]
 
-                while len(dupla) < 2:
-                    if dia <= START_WINDOW_DIAS and use_start_strategy and not dupla:
-                        src = duplas5 if dia <= 5 else duplas3
-                        if turno_i < len(src):
-                            op1, op2 = src[turno_i]
-                            if (op1 not in disp) or (op2 not in disp):
-                                op1, op2 = escolher_dupla_fallback(disp, disp, funcionarios, folga_rest)
+                def cand_em_ciclo(turno_):
+                    return [
+                        f for f in candidatos_base()
+                        if turno_atual.get(str(f["id"])) == turno_
+                        and work_left.get(str(f["id"]), 0) > 0
+                    ]
+
+                def cand_para_iniciar(turno_):
+                    return [
+                        f for f in candidatos_base()
+                        if turno_atual.get(str(f["id"])) == turno_
+                        and work_left.get(str(f["id"]), 0) == 0
+                        and off_left.get(str(f["id"]), 0) == 0
+                    ]
+
+                def cand_sem_turno():
+                    return [
+                        f for f in candidatos_base()
+                        if turno_atual.get(str(f["id"])) is None
+                        and work_left.get(str(f["id"]), 0) == 0
+                        and off_left.get(str(f["id"]), 0) == 0
+                    ]
+
+                while len(aloc) < vagas:
+                    # prioridade: continuar bloco já em andamento no turno
+                    base = cand_em_ciclo(turno)
+
+                    # se não houver, tenta iniciar novo bloco no turno "correto" do usuário
+                    if not base:
+                        base = cand_para_iniciar(turno)
+
+                    # se ainda não houver, tenta encaixar quem ainda não tem turno (primeiro encaixe do mês)
+                    if not base:
+                        base = cand_sem_turno()
+
+                    # último recurso (FLEX): qualquer disponível hoje (pode quebrar alinhamento do turno_atual)
+                    if not base and FLEXIBILIZAR:
+                        base = candidatos_base()
+
+                    if not base:
+                        break
+
+                    # Regra de perfil (quando vagas == 2): tenta EXP + AUX
+                    if vagas == 2:
+                        if len(aloc) == 0:
+                            escolhido = _pick_por_perfil(base, "EXP", d_local, h_local) or _pick_melhor(base, d_local, h_local)
                         else:
-                            op1, op2 = escolher_dupla_fallback(disp, disp, funcionarios, folga_rest)
+                            primeiro = aloc[0].get("perfil")
+                            alvo = "AUX" if primeiro == "EXP" else "EXP"
+                            escolhido = _pick_por_perfil(base, alvo, d_local, h_local) or _pick_melhor(base, d_local, h_local)
                     else:
-                        exp_pool = [f for f in disp if f["perfil"] == "EXP" and str(f["id"]) not in alocados_hoje]
-                        aux_pool = [f for f in disp if f["perfil"] == "AUX" and str(f["id"]) not in alocados_hoje]
-                        if FLEXIBILIZAR and (len(exp_pool) < 1 or len(aux_pool) < 1):
-                            global_pool = [f for f in funcionarios
-                                           if str(f["id"]) not in alocados_hoje and folga_rest[str(f["id"])] == 0]
-                            if len(global_pool) >= 2:
-                                op1, op2 = random.sample(global_pool, 2)
-                            else:
-                                op1, op2 = escolher_dupla_fallback([], [], funcionarios, folga_rest)
-                        else:
-                            op1 = escolher_func(
-                                exp_pool, turno, h_local, c, dia, info["preferencias"],
-                                u_turno, stats, params, data_atual, info,
-                                mes_acum_horas, seq_trab, seq_folga,
-                                parceiro_ult, None, estado_continuo,
-                                dias_trab_mes, dias_semana, week_id, dias_trab_alvo,
-                                folga_rest)
-                            op2 = escolher_func(
-                                aux_pool, turno, h_local, c, dia, info["preferencias"],
-                                u_turno, stats, params, data_atual, info,
-                                mes_acum_horas, seq_trab, seq_folga,
-                                parceiro_ult, op1["id"], estado_continuo,
-                                dias_trab_mes, dias_semana, week_id, dias_trab_alvo,
-                                folga_rest)
-                    candidatos = [op1, op2]
-                    for op in candidatos:
-                        if op in disp and op not in dupla and len(dupla) < 2:
-                            dupla.append(op); disp.remove(op); alocados_hoje.add(str(op["id"]))
-                    if len(dupla) < 2:
-                        op_rand = random.choice([f for f in disp if folga_rest[str(f["id"])] == 0]) if disp \
-                                  else random.choice([f for f in funcionarios
-                                                      if f not in dupla and folga_rest[str(f["id"])] == 0])
-                        dupla.append(op_rand); alocados_hoje.add(str(op_rand["id"]))
-                        if op_rand in disp: disp.remove(op_rand)
+                        # vaga única (4x1 madrugada): prefere EXP
+                        escolhido = _pick_por_perfil(base, "EXP", d_local, h_local) or _pick_melhor(base, d_local, h_local)
 
-                linha["turnos"][turno] = dupla
+                    if not escolhido:
+                        break
 
-                for op in dupla:
+                    fid = str(escolhido["id"])
+
+                    # se não tinha turno definido ainda, fixa agora no turno que ele está sendo alocado
+                    if turno_atual[fid] is None:
+                        turno_atual[fid] = turno
+
+                    # se está livre (não em bloco e não em folga), iniciar bloco com folga da semana ATUAL
+                    if work_left[fid] == 0 and off_left[fid] == 0:
+                        _iniciar_bloco(fid, turno_atual[fid], work_left, off_len_atual, turno_atual, folga_prox)
+
+                    aloc.append(escolhido)
+                    alocados_hoje.add(fid)
+
+                linha["turnos"][turno] = aloc
+
+                # stats + ultimo turno do dia
+                for op in aloc:
                     fid = str(op["id"])
                     stats[fid][turno] += 1
-                    parceiro_ult[fid] = dupla[1]["id"] if op is dupla[0] else dupla[0]["id"]
-                    u_turno[fid]      = turno
+                    u_turno[fid] = turno  # usado pelo parecer/continuidade
+                    # c (consec) será atualizado abaixo
 
-            ids_trab = {str(e["id"]) for t in TURNOS for e in linha["turnos"][t]}
+            # -------------------------
+            # Consolida quem trabalhou hoje
+            # -------------------------
+            ids_trab = {str(e["id"]) for t in TURNOS for e in linha["turnos"].get(t, [])}
 
-            # ---------- update horas e stats gerais ----------
+            # Horas/dias acumulados
             for fid in ids_trab:
                 h_local[fid] += HORAS_POR_TURNO
-                c[fid] += 1
                 d_local[fid] += 1
                 dias_trab_mes[fid] += 1
                 dias_semana[fid][week_id] = dias_semana[fid].get(week_id, 0) + 1
 
-            # ---------- UPDATE DO NOVO CICLO (obrigatório) ----------
+            # -------------------------
+            # UPDATE do ciclo 4 dias + folga 2/3
+            # -------------------------
+            # 1) Quem trabalhou hoje consome 1 dia do bloco (work_left)
             for fid in ids_trab:
-                # início de ciclo se estava livre
-                if trab_rest[fid] == 0 and folga_rest[fid] == 0:
-                    alvo_trab_atual[fid]  = dias_trab_alvo
-                    alvo_folga_atual[fid] = 7 - dias_trab_alvo
-                    trab_rest[fid]        = alvo_trab_atual[fid]
+                if work_left[fid] <= 0:
+                    # fallback: se entrou sem iniciar bloco (não deveria), corrige
+                    _iniciar_bloco(fid, turno_atual.get(fid) or u_turno.get(fid) or "00H",
+                                   work_left, off_len_atual, turno_atual, folga_prox)
 
-                # consome um dia de trabalho
-                trab_rest[fid] = max(0, trab_rest[fid] - 1)
+                work_left[fid] = max(0, work_left[fid] - 1)
 
-                # se acabou bloco de trabalho, agenda folga
-                if trab_rest[fid] == 0:
-                    folga_rest[fid] = alvo_folga_atual[fid]
+                # terminou bloco -> entra em folga (fixada no início do bloco)
+                if work_left[fid] == 0:
+                    off_left[fid] = int(off_len_atual[fid] or folga_prox)
 
-            for f in funcionarios:
-                fid = str(f["id"])
-                if fid not in ids_trab:
-                    if folga_rest[fid] > 0:
-                        folga_rest[fid] = max(0, folga_rest[fid] - 1)
-                    elif trab_rest[fid] > 0:
-                        # quebrou bloco de trabalho
-                        trab_rest[fid] = 0
-                        folga_rest[fid] = alvo_folga_atual[fid] if alvo_folga_atual[fid] is not None else 2
+                # atualiza c (consec antigo) para compatibilidade com estado_continuo
+                c[fid] = c.get(fid, 0) + 1
 
-            # ---------- sequências antigas ----------
+            # 2) Quem não trabalhou hoje:
             for f in funcionarios:
                 fid = str(f["id"])
                 if fid in ids_trab:
-                    seq_trab[fid] += 1; seq_folga[fid] = 0
-                else:
-                    seq_trab[fid] = 0; seq_folga[fid] += 1; c[fid] = 0
+                    continue
+
+                # Se entrou em férias HOJE (transição), quebra ciclo e avança turno uma vez (preserva rotação)
+                if em_ferias_hoje[fid] and not em_ferias_ontem.get(fid, False):
+                    if turno_atual.get(fid):
+                        turno_atual[fid] = CICLO_TURNOS[turno_atual[fid]]
+                    work_left[fid] = 0
+                    off_left[fid] = 0
+                    off_len_atual[fid] = None
+                    c[fid] = 0
+                    continue
+
+                # Se continua de férias, congela (não avança nem consome)
+                if em_ferias_hoje[fid]:
+                    c[fid] = 0
+                    continue
+
+                # Se estava em folga, consome 1 dia
+                if off_left[fid] > 0:
+                    off_left[fid] = max(0, off_left[fid] - 1)
+                    c[fid] = 0
+                    # terminou folga -> avança turno pro próximo (CICLO)
+                    if off_left[fid] == 0 and turno_atual.get(fid):
+                        turno_atual[fid] = CICLO_TURNOS[turno_atual[fid]]
+                        off_len_atual[fid] = None  # próxima folga será aplicada no início do próximo ciclo
+                    continue
+
+                # Se NÃO estava em folga mas estava em bloco e ficou sem escalar (por falta de vaga/restrições),
+                # quebra o bloco e força folga mínima (não emenda automaticamente)
+                if work_left[fid] > 0:
+                    work_left[fid] = 0
+                    off_left[fid] = int(off_len_atual[fid] or 2)
+                    off_len_atual[fid] = off_left[fid]
+                    c[fid] = 0
+                    continue
+
+                # totalmente livre e não trabalhou hoje
+                c[fid] = 0
+
+            # atualiza mapa "ontem"
+            em_ferias_ontem = em_ferias_hoje
 
             dias_mes.append(linha)
 
-            # fim do mês, calcula score seguro
+        # -------------------------
+        # Score simples (equilíbrio de horas) + guarda melhor tentativa
+        # -------------------------
         valores = list(h_local.values())
-        if not valores:        # evita erro de sequência vazia
+        if not valores:
             continue
+
         score = (max(valores) - min(valores)) + statistics.mean(valores) / 5
+
         if score < melhor_score:
             melhor_score = score
-            melhor_dias  = dias_mes
+            melhor_dias = dias_mes
             melhor_outros = {"horas": h_local, "stats": stats, "dias_trab": d_local}
 
     return {
-        "dias":   melhor_dias,
+        "dias": melhor_dias,
         **melhor_outros,
-        "score":  melhor_score,
+        "score": melhor_score,
     }
 
 
