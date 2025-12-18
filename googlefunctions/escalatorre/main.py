@@ -443,9 +443,9 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
                         if turno_i < len(src):
                             op1, op2 = src[turno_i]
                             if (op1 not in disp) or (op2 not in disp):
-                                op1, op2 = escolher_dupla_fallback(disp, disp)
+                                op1, op2 = escolher_dupla_fallback(disp, disp, funcionarios)
                         else:
-                            op1, op2 = escolher_dupla_fallback(disp, disp)
+                            op1, op2 = escolher_dupla_fallback(disp, disp, funcionarios)
                     else:
                         exp_pool = [f for f in disp if f["perfil"] == "EXP"]
                         aux_pool = [f for f in disp if f["perfil"] == "AUX"]
@@ -466,7 +466,12 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
                             dupla.append(op)
                             disp.remove(op)
                     if len(dupla) < 2:
-                        op_rand = random.choice(funcionarios)
+                        if disp:
+                            op_rand = random.choice(disp)
+                            disp.remove(op_rand)
+                        else:
+                            remaining = [f for f in funcionarios if f not in dupla]
+                            op_rand = random.choice(remaining)
                         if op_rand not in dupla:
                             dupla.append(op_rand)
 
@@ -529,7 +534,7 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
 # ========================
 #   FUNÇÃO AUX – dupla fallback
 # ========================
-def escolher_dupla_fallback(disp, aux_pool):
+def escolher_dupla_fallback(disp, aux_pool, funcionarios):
     if not disp:
         disp[:] = aux_pool or funcionarios
     op1 = random.choice(disp)
