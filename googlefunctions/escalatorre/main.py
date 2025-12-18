@@ -13,7 +13,7 @@
 # Nenhum reset de ultimo_turno durante folga
 # Funções claramente separadas
 
-import json, calendar, random, statistics
+import json, calendar, random, statistics, math
 from datetime import datetime, timedelta
 
 # ========================
@@ -157,9 +157,19 @@ def restricoes_hard(fid, turno, data, info, consec, ultimo_turno, stats):
 # ========================
 def score_func(params, func, turno, horas, consec, dia, prefs,
                ultimo_turno, stats, mes_acum_horas, dias_trab_mes,
-               seq_trab=None, seq_folga=None, parceiro_ult=None, parceiro_atual=None, estado_continuo=None):
+               seq_trab=None, seq_folga=None, parceiro_ult=None, parceiro_atual=None,
+               estado_continuo=None, dias_semana=None, week_id=None, meta_semana=None):
     fid = str(func["id"])
     s = 0
+
+    # --- controle de meta semanal 4/5 -----------------
+    if dias_semana is not None and week_id is not None and meta_semana is not None:
+        trabalhou_semana = dias_semana.get(fid, {}).get(week_id, 0)
+        if trabalhou_semana >= meta_semana:
+            s += 5000  # penalidade muito alta
+        elif trabalhou_semana == meta_semana - 1:
+            s += 800   # penalidade média
+    # --------------------------------------------------
 
     # penalidade de continuidade na primeira semana
     if estado_continuo and dia <= START_WINDOW_DIAS:
@@ -234,7 +244,7 @@ def escolher_func(pool, turno, horas, consec, dia, prefs,
                   ultimo_turno, stats, params, data, info,
                   mes_acum_horas, seq_trab, seq_folga,
                   parceiro_ult, parceiro_candidato, estado_continuo,
-                  dias_trab_mes):
+                  dias_trab_mes, dias_semana, week_id, meta_semana):
     cand = [f for f in pool if restricoes_hard(str(f["id"]), turno, data, info,
                                               consec, ultimo_turno, stats)]
     if not cand:
@@ -264,7 +274,8 @@ def escolher_func(pool, turno, horas, consec, dia, prefs,
             dias_trab_mes=dias_trab_mes,
             seq_trab=seq_trab, seq_folga=seq_folga,
             parceiro_ult=parceiro_ult, parceiro_atual=parceiro_candidato,
-            estado_continuo=estado_continuo
+            estado_continuo=estado_continuo,
+            dias_semana=dias_semana, week_id=week_id, meta_semana=meta_semana
         )
     )
 
@@ -382,6 +393,9 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
 
     melhor_score, melhor_dias, melhor_outros = float("inf"), None, {}
 
+    # cálculo global de meta semanal (simplificado)
+    meta_semana_global = max(4, math.ceil(56 / len(funcionarios)))
+
     for tentativa in range(tentativas):
         c = {
             str(f["id"]): estado_continuo["consec"].get(str(f["id"]), 0) if estado_continuo else 0
@@ -399,6 +413,10 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
         seq_trab     = {str(f["id"]): 0 for f in funcionarios}
         seq_folga    = {str(f["id"]): 0 for f in funcionarios}
         parceiro_ult = {str(f["id"]): None for f in funcionarios}
+
+        # ---- controle semanal de dias trabalhados -----
+        dias_semana = {str(f["id"]): {} for f in funcionarios}
+        # ----------------------------------------------
 
         # --- BLOCO: já inicia respeitando sequências vigentes --------------
         bloco = {}
@@ -422,6 +440,9 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
 
         for dia in range(1, dias_no_mes + 1):
             data_atual = datetime(ano, mes, dia).date()
+            week_id = f"{data_atual.isocalendar()[0]}-{data_atual.isocalendar()[1]:02d}"
+            meta_semana = meta_semana_global  # simples
+
             linha = {"data": str_data(ano, mes, dia), "turnos": {}}
 
             # controle de repetição no dia
@@ -481,12 +502,14 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
                                                 u_turno, stats, params, data_atual, info,
                                                 mes_acum_horas, seq_trab, seq_folga,
                                                 parceiro_ult, None, estado_continuo,
-                                                dias_trab_mes=dias_trab_mes)
+                                                dias_trab_mes=dias_trab_mes,
+                                                dias_semana=dias_semana, week_id=week_id, meta_semana=meta_semana)
                             op2 = escolher_func(aux_pool, turno, h_local, c, dia, info["preferencias"],
                                                 u_turno, stats, params, data_atual, info,
                                                 mes_acum_horas, seq_trab, seq_folga,
                                                 parceiro_ult, op1["id"], estado_continuo,
-                                                dias_trab_mes=dias_trab_mes)
+                                                dias_trab_mes=dias_trab_mes,
+                                                dias_semana=dias_semana, week_id=week_id, meta_semana=meta_semana)
                     candidatos = [op1, op2]
                     for op in candidatos:
                         if op in disp and op not in dupla and len(dupla) < 2:
@@ -533,6 +556,8 @@ def gerar_escala_mes(ano, mes, funcionarios, params, info,
                 c[fid] += 1
                 d_local[fid] += 1
                 dias_trab_mes[fid] += 1
+                # --- contador semanal ---
+                dias_semana[fid][week_id] = dias_semana[fid].get(week_id, 0) + 1
             # --------------------------------------
 
             for f in funcionarios:
